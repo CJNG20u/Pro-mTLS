@@ -281,7 +281,7 @@ secure.homelab.local {
                   type="text"
                   value={config.host}
                   onChange={(e) => setConfig({ ...config, host: e.target.value })}
-                  placeholder="e.g. 192.3.16.66 or caddy.homelab"
+                  placeholder="e.g. 203.0.113.10 or caddy.example.com"
                   required
                   className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-500 font-mono"
                 />
