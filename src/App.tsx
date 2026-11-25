@@ -12,6 +12,15 @@ import { CrlPanel } from './components/CrlPanel.tsx';
 import { SettingsPanel } from './components/SettingsPanel.tsx';
 import { InstallGuideModal } from './components/InstallGuideModal.tsx';
 import { AuthLockScreen } from './components/AuthLockScreen.tsx';
+import { BrandMark } from './components/BrandMark.tsx';
+
+const PAGE_TITLES: Record<string, { kicker: string; title: string; blurb: string }> = {
+  dashboard: { kicker: '01 / Authority', title: 'Certificates & CA', blurb: 'Your private root, the identities it has signed, and their state.' },
+  certificates: { kicker: '01 / Authority', title: 'Certificates & CA', blurb: 'Your private root, the identities it has signed, and their state.' },
+  caddy: { kicker: '02 / Distribution', title: 'Server Sync', blurb: 'Push the CA and revocation list to your Caddy server over SSH.' },
+  crl: { kicker: '03 / Revocation', title: 'CRL & Trust', blurb: 'The published certificate revocation list and trust material.' },
+  settings: { kicker: '04 / System', title: 'Settings', blurb: 'Dashboard access and application preferences.' },
+};
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'certificates' | 'caddy' | 'crl' | 'settings'>('dashboard');
@@ -85,13 +94,11 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
-        <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mb-3">
-          <Shield className="w-6 h-6 animate-pulse" />
-        </div>
-        <div className="flex items-center gap-2 text-slate-400 text-xs font-medium">
-          <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
-          <span>Starting Pro mTLS Manager...</span>
+      <div className="min-h-screen flex flex-col items-center justify-center p-4">
+        <BrandMark className="w-12 h-12 text-emerald-400 animate-pulse mb-4" />
+        <div className="flex items-center gap-2 text-slate-400">
+          <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+          <span className="kicker text-slate-400!">Starting Pro mTLS Manager</span>
         </div>
       </div>
     );
@@ -106,9 +113,10 @@ export default function App() {
   }
 
   const caActive = ca?.status === 'active';
+  const page = PAGE_TITLES[activeTab];
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-emerald-500/20 selection:text-emerald-300">
+    <div className="min-h-screen text-slate-100 flex flex-col md:pl-64">
       {/* Top Bar strictly matching contract */}
       <TopBar
         activeTab={activeTab}
@@ -123,7 +131,7 @@ export default function App() {
       {toast && (
         <div className="fixed bottom-5 right-5 z-50 transition-all transform animate-in fade-in slide-in-from-bottom-3 duration-200">
           <div
-            className={`px-4 py-3 rounded-xl shadow-2xl border text-xs font-medium flex items-center gap-2.5 backdrop-blur-md ${
+            className={`pl-3 pr-4 py-3 rounded-lg shadow-2xl border border-l-4 text-xs font-medium flex items-center gap-2.5 backdrop-blur-md ${
               toast.type === 'success'
                 ? 'bg-slate-900/95 border-emerald-500/40 text-emerald-300'
                 : toast.type === 'error'
@@ -142,7 +150,14 @@ export default function App() {
       )}
 
       {/* Main Viewport Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+      <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 lg:px-10 py-8 md:py-10 space-y-6">
+        {/* Page header */}
+        <div className="flex flex-col gap-1 pb-5 border-b border-slate-800/80">
+          <span className="kicker text-emerald-400!">{page.kicker}</span>
+          <h1 className="text-2xl md:text-3xl font-semibold text-white tracking-tight">{page.title}</h1>
+          <p className="text-sm text-slate-400">{page.blurb}</p>
+        </div>
+
         {/* Missing CA Warning Banner if on certificates or caddy tab */}
         {!caActive && activeTab !== 'dashboard' && (
           <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-300">
@@ -223,12 +238,13 @@ export default function App() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-slate-800/60 bg-slate-950 py-6 text-xs text-slate-500">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+      <footer className="border-t border-slate-800/60 py-6 text-xs text-slate-500">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-10 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <span className="font-semibold text-slate-400">Pro mTLS Manager</span>
-            <span>·</span>
-            <span>All-in-One Private CA & mTLS Dashboard</span>
+            <BrandMark className="w-4 h-4 text-slate-500" />
+            <span className="font-mono uppercase tracking-[0.14em] text-[10px] text-slate-400">Pro mTLS Manager</span>
+            <span className="text-slate-700">/</span>
+            <span>Private CA & mTLS console</span>
           </div>
           <div className="flex items-center gap-4 text-slate-400">
             <button

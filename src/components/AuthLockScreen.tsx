@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Shield, Lock, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
 import { api } from '../services/api.ts';
+import { BrandMark } from './BrandMark.tsx';
 
 interface AuthLockScreenProps {
   onAuthenticated: () => void;
@@ -33,13 +34,12 @@ export const AuthLockScreen: React.FC<AuthLockScreenProps> = ({ onAuthenticated 
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col justify-center items-center p-4">
-      <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl">
-        <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto mb-5">
-          <Shield className="w-7 h-7" />
-        </div>
+    <div className="min-h-screen flex flex-col justify-center items-center p-4">
+      <div className="max-w-md w-full bg-slate-900 border border-slate-800 border-t-2 border-t-emerald-400 rounded-2xl p-8 shadow-2xl">
+        <BrandMark className="w-14 h-14 text-emerald-400 mx-auto mb-5" />
 
         <div className="text-center mb-6">
+          <span className="kicker block mb-1">Private CA console</span>
           <h1 className="text-xl font-bold text-white tracking-tight">Pro mTLS Manager</h1>
           <p className="text-xs text-slate-400 mt-1">
             Dashboard is protected with access passcode.
