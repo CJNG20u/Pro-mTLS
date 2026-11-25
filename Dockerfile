@@ -15,6 +15,11 @@ WORKDIR /app
 ENV NODE_ENV=production \
     PORT=3000
 
+# openssl CLI is used to generate the CRL
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends openssl ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
 COPY --from=build /app/package.json ./
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
