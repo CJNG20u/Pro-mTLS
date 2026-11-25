@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import forge from 'node-forge';
+import { appConfig } from './config.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -77,7 +78,7 @@ export interface CrlDetails {
   rawPem: string;
 }
 
-const STORAGE_ROOT = path.resolve(process.cwd(), 'pki_storage');
+const STORAGE_ROOT = appConfig.dataDir;
 const CA_DIR = path.join(STORAGE_ROOT, 'ca');
 const CERTS_DIR = path.join(STORAGE_ROOT, 'certs');
 const CRL_DIR = path.join(STORAGE_ROOT, 'crl');
@@ -130,7 +131,7 @@ crl = ${CRL_DIR}/crl.pem
 private_key = ${path.join(CA_DIR, 'ca.key')}
 certificate = ${path.join(CA_DIR, 'ca.crt')}
 default_md = sha256
-default_crl_days = 30
+default_crl_days = ${appConfig.crl.validityDays}
 policy = policy_anything
 
 [ policy_anything ]
@@ -154,6 +155,47 @@ emailAddress = optional
     const certPath = path.join(CA_DIR, 'ca.crt');
     const keyPath = path.join(CA_DIR, 'ca.key');
     return fs.existsSync(certPath) && fs.existsSync(keyPath);
+  }
+
+  /**
+   * First-run CA bootstrap:
+   * - If a Root CA already exists, ensures OpenSSL config and exports are up to date.
+   * - If the CA directory is empty and CA_AUTO_INIT=true, initializes a fresh Root CA using .env values.
+   * - Otherwise leaves CA uninitialized so the UI presents the first-run setup flow.
+   */
+  public async ensureFirstRunCa(): Promise<void> {
+    if (this.isCaActive()) {
+      this.ensureOpenSslCnf();
+      return;
+    }
+
+    if (appConfig.ca.autoInit) {
+      console.log(
+        `[Pro mTLS Manager] CA directory is empty and CA_AUTO_INIT=true. Initializing Root CA "${appConfig.ca.commonName}"...`
+      );
+      await this.initRootCa({
+        commonName: appConfig.ca.commonName,
+        organization: appConfig.ca.organization,
+        organizationalUnit: appConfig.ca.organizationalUnit,
+        country: appConfig.ca.country,
+        validityDays: appConfig.ca.validityDays,
+        keySize: appConfig.ca.keySize,
+        wipeExistingCerts: false,
+      });
+      console.log('[Pro mTLS Manager] Fresh Root CA and initial CRL generated automatically.');
+    } else {
+      console.log(
+        '[Pro mTLS Manager] No Root CA found in DATA_DIR. Open the web UI to complete first-run Root CA setup (or set CA_AUTO_INIT=true in .env).'
+      );
+    }
+  }
+
+  private exportFileToPath(targetPath: string, content: string, mode: number = 0o644): void {
+    const parentDir = path.dirname(targetPath);
+    if (!fs.existsSync(parentDir)) {
+      fs.mkdirSync(parentDir, { recursive: true, mode: 0o755 });
+    }
+    fs.writeFileSync(targetPath, content, { mode, encoding: 'utf8' });
   }
 
   public getCaDetails(): CaDetails {
@@ -203,8 +245,8 @@ emailAddress = optional
 
     return {
       status: 'active',
-      commonName: getAttr('CN') || getAttr('commonName') || 'Pro mTLS Root CA',
-      organization: getAttr('O') || getAttr('organizationName') || 'Homelab CA',
+      commonName: getAttr('CN') || getAttr('commonName') || appConfig.ca.commonName,
+      organization: getAttr('O') || getAttr('organizationName') || appConfig.ca.organization,
       organizationalUnit: getAttr('OU') || getAttr('organizationalUnitName') || undefined,
       country: getAttr('C') || getAttr('countryName') || undefined,
       keySize,
@@ -292,6 +334,14 @@ emailAddress = optional
     fs.writeFileSync(path.join(CA_DIR, 'ca.crt'), certPem, { mode: 0o644 });
     fs.writeFileSync(path.join(CA_DIR, 'ca.key'), keyPem, { mode: 0o600 });
 
+    if (appConfig.crl.caCertOutputPath) {
+      try {
+        this.exportFileToPath(appConfig.crl.caCertOutputPath, certPem, 0o644);
+      } catch (err: any) {
+        console.warn(`Warning: Failed to export CA cert to CA_CERT_OUTPUT_PATH (${appConfig.crl.caCertOutputPath}): ${err.message}`);
+      }
+    }
+
     const caMeta = {
       initializedAt: new Date().toISOString(),
       commonName: options.commonName,
@@ -359,10 +409,10 @@ emailAddress = optional
           .filter((h) => h.length > 0)
       )
     );
-    if (cleanedHosts.length === 0) {
-      throw new Error('At least one allowed hostname is required (e.g. *.example.com).');
+    const allowedHosts = cleanedHosts.length > 0 ? cleanedHosts : [...appConfig.caddy.defaultAllowedHosts];
+    if (allowedHosts.length === 0) {
+      throw new Error('At least one allowed hostname is required (e.g. *.example.com), or set DEFAULT_ALLOWED_HOSTS.');
     }
-    const allowedHosts = cleanedHosts;
 
     const caDetails = this.getCaDetails();
     const caCertPem = fs.readFileSync(path.join(CA_DIR, 'ca.crt'), 'utf8');
@@ -549,8 +599,7 @@ emailAddress = optional
       if (fs.existsSync(metaPath)) {
         try {
           const raw = fs.readFileSync(metaPath, 'utf8');
-          const item = JSON.parse(raw) as StoredClientCert & { hidden?: boolean };
-          if (item.hidden) continue;
+          const item = JSON.parse(raw) as StoredClientCert;
           item.allowedHosts = Array.isArray(item.allowedHosts) ? item.allowedHosts : [];
           const exp = new Date(item.expiryDate);
 
@@ -676,37 +725,43 @@ emailAddress = optional
   public async deleteCertificate(id: string): Promise<boolean> {
     const cert = this.getCertificateById(id);
     const certDir = path.join(CERTS_DIR, id);
-    const metaPath = path.join(certDir, 'meta.json');
 
-    if (cert) {
-      // Ensure the certificate is permanently revoked in OpenSSL index.txt & crl.pem before hiding
-      if (cert.status !== 'revoked') {
-        cert.status = 'revoked';
-        cert.revokedAt = new Date().toISOString();
-        cert.revocationReason = 'superseded';
-        this.updateOpenSslRevocation(cert, 'superseded');
-      }
-      await this.generateCrl();
-
-      // Purge private keys and bundles from disk while keeping meta.json marked hidden
-      for (const file of ['bundle.p12', 'cert.crt', 'cert.key']) {
-        const fPath = path.join(certDir, file);
-        if (fs.existsSync(fPath)) {
-          try {
-            fs.rmSync(fPath, { force: true });
-          } catch {}
-        }
-      }
-
-      if (fs.existsSync(metaPath)) {
-        const updatedMeta = { ...cert, hidden: true };
-        fs.writeFileSync(metaPath, JSON.stringify(updatedMeta, null, 2), 'utf8');
-      }
-    } else if (fs.existsSync(certDir)) {
+    if (fs.existsSync(certDir)) {
       try {
         fs.rmSync(certDir, { recursive: true, force: true });
       } catch (err: any) {
         console.warn(`Error deleting cert dir ${certDir}:`, err.message);
+      }
+    }
+
+    if (cert) {
+      try {
+        const indexFile = path.join(CRL_DIR, 'index.txt');
+        if (fs.existsSync(indexFile)) {
+          const lines = fs.readFileSync(indexFile, 'utf8').split('\n');
+          const updated = lines.filter((line) => {
+            const parts = line.split('\t');
+            if (parts.length >= 4 && parts[3].toLowerCase() === cert.serialNumber.toLowerCase()) {
+              return false;
+            }
+            return true;
+          });
+          fs.writeFileSync(indexFile, updated.join('\n'), 'utf8');
+        }
+
+        const newcertsDir = path.join(CRL_DIR, 'newcerts');
+        const archivePath = path.join(newcertsDir, `${cert.serialNumber.toUpperCase()}.pem`);
+        if (fs.existsSync(archivePath)) {
+          try {
+            fs.rmSync(archivePath, { force: true });
+          } catch {}
+        }
+
+        if (cert.status === 'revoked') {
+          await this.generateCrl();
+        }
+      } catch (e) {
+        console.warn('Error cleaning up OpenSSL index on certificate deletion:', e);
       }
     }
 
@@ -718,18 +773,30 @@ emailAddress = optional
       throw new Error('Root CA must be active to generate CRL.');
     }
 
+    this.ensureOpenSslCnf();
     const cnfPath = path.join(CRL_DIR, 'openssl.cnf');
     const crlPath = path.join(CRL_DIR, 'crl.pem');
+    const crlDays = String(appConfig.crl.validityDays);
 
     try {
       await execFileAsync('openssl', ['ca', '-config', cnfPath, '-gencrl', '-out', crlPath]);
     } catch (err: any) {
       console.warn('OpenSSL ca gencrl failed, attempting direct crl generation:', err?.message);
-      await execFileAsync('openssl', ['ca', '-config', cnfPath, '-gencrl', '-out', crlPath, '-crldays', '30']);
+      await execFileAsync('openssl', ['ca', '-config', cnfPath, '-gencrl', '-out', crlPath, '-crldays', crlDays]);
     }
 
     if (fs.existsSync(crlPath)) {
-      return fs.readFileSync(crlPath, 'utf8');
+      const crlPem = fs.readFileSync(crlPath, 'utf8');
+
+      if (appConfig.crl.outputPath) {
+        try {
+          this.exportFileToPath(appConfig.crl.outputPath, crlPem, 0o644);
+        } catch (err: any) {
+          console.warn(`Warning: Failed to export CRL to CRL_OUTPUT_PATH (${appConfig.crl.outputPath}): ${err.message}`);
+        }
+      }
+
+      return crlPem;
     }
     throw new Error('Failed to generate crl.pem');
   }
@@ -754,7 +821,7 @@ emailAddress = optional
     }
 
     const now = new Date();
-    const next = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+    const next = new Date(now.getTime() + appConfig.crl.validityDays * 24 * 60 * 60 * 1000);
 
     return {
       lastUpdated: fs.statSync(crlPath).mtime.toISOString(),
@@ -773,32 +840,30 @@ emailAddress = optional
   }
 
   public getCaddyConfig(): any {
+    const defaults = {
+      host: '',
+      port: 22,
+      username: '',
+      authType: 'password',
+      remoteCertsDir: appConfig.caddy.remoteCertsDir,
+      reloadCommand: appConfig.caddy.reloadCmd,
+      autoSyncOnRevoke: true,
+      lastSyncStatus: 'never',
+    };
+
     if (!fs.existsSync(CONFIG_FILE)) {
-      return {
-        host: '',
-        port: 22,
-        username: 'root',
-        authType: 'password',
-        remoteCertsDir: '/etc/caddy/certs',
-        reloadCommand: 'sudo systemctl reload caddy',
-        autoSyncOnRevoke: true,
-        lastSyncStatus: 'never',
-      };
+      return defaults;
     }
     try {
       const data = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
-      return data.caddy || {
-        host: '',
-        port: 22,
-        username: 'root',
-        authType: 'password',
-        remoteCertsDir: '/etc/caddy/certs',
-        reloadCommand: 'sudo systemctl reload caddy',
-        autoSyncOnRevoke: true,
-        lastSyncStatus: 'never',
-      };
+      return data.caddy
+        ? {
+            ...defaults,
+            ...data.caddy,
+          }
+        : defaults;
     } catch {
-      return {};
+      return defaults;
     }
   }
 

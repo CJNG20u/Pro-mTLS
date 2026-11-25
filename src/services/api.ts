@@ -1,4 +1,4 @@
-import { CaDetails, StoredClientCert, CrlDetails, CaddyConfig, SyncResult, AuthStatus } from '../types.ts';
+import { CaDetails, StoredClientCert, CrlDetails, CaddyConfig, SyncResult, AuthStatus, SystemConfig } from '../types.ts';
 
 const TOKEN_KEY = 'mtls_dashboard_auth_token';
 
@@ -89,6 +89,11 @@ export const api = {
       setStoredToken(res.token);
     }
     return res;
+  },
+
+  // System Config
+  async getSystemConfig(): Promise<SystemConfig> {
+    return request<SystemConfig>('/api/system/config');
   },
 
   // CA
@@ -187,6 +192,12 @@ export const api = {
 
   async syncCaddy(): Promise<SyncResult> {
     return request<SyncResult>('/api/caddy/sync', {
+      method: 'POST',
+    });
+  },
+
+  async syncLocalCaddy(): Promise<SyncResult> {
+    return request<SyncResult>('/api/caddy/sync-local', {
       method: 'POST',
     });
   },

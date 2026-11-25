@@ -1,6 +1,8 @@
+import './server/config.ts';
 import express from 'express';
 import path from 'node:path';
 import fs from 'node:fs';
+import { appConfig, getPublicSystemConfig, validateStartupEnvironment } from './server/config.ts';
 import { pkiEngine } from './server/pki-engine.ts';
 import { caddySshService } from './server/caddy-ssh.ts';
 import {
@@ -12,8 +14,15 @@ import {
 } from './server/auth.ts';
 
 async function startServer() {
+  // Validate host OpenSSL and .env configuration before starting
+  await validateStartupEnvironment();
+
+  // Initialize Root CA automatically on first run if CA_AUTO_INIT=true
+  await pkiEngine.ensureFirstRunCa();
+
   const app = express();
-  const PORT = parseInt(process.env.PORT || '3000', 10);
+  const PORT = appConfig.port;
+  const HOST = appConfig.host;
 
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
@@ -88,6 +97,11 @@ async function startServer() {
     }
   });
 
+  // ---------------- SYSTEM CONFIG ROUTE ----------------
+  app.get('/api/system/config', (_req, res) => {
+    res.json(getPublicSystemConfig());
+  });
+
   // ---------------- ROOT CA ROUTES ----------------
   app.get('/api/ca', (_req, res) => {
     try {
@@ -157,13 +171,13 @@ async function startServer() {
       } = req.body;
 
       if (!personalizedName || !personalizedName.trim()) {
-        return res.status(400).json({ error: 'Personalized name is required (e.g., Alex-Pixel9Pro).' });
+        return res.status(400).json({ error: 'Personalized name is required (e.g., alice-laptop or mobile-device-01).' });
       }
 
       const rawPass = p12Password !== undefined ? p12Password : password;
       const normalizedPassword = typeof rawPass === 'string' && rawPass.length > 0 ? rawPass : null;
 
-      let parsedAllowedHosts: string[] = [];
+      let parsedAllowedHosts: string[] = [...appConfig.caddy.defaultAllowedHosts];
       if (Array.isArray(allowedHosts)) {
         const cleaned = allowedHosts.map((h: unknown) => (typeof h === 'string' ? h.trim() : '')).filter(Boolean);
         if (cleaned.length > 0) {
@@ -221,7 +235,7 @@ async function startServer() {
       const { reason } = req.body;
       const revokedCert = await pkiEngine.revokeCertificate(id, reason);
 
-      // Check if auto-sync to Caddy is enabled
+      // Check if auto-sync to Caddy is enabled (remote SSH or local bare-metal)
       const caddyConfig = pkiEngine.getCaddyConfig();
       let syncResult = null;
       if (caddyConfig.autoSyncOnRevoke && caddyConfig.host && caddyConfig.username) {
@@ -232,6 +246,16 @@ async function startServer() {
           syncResult = {
             success: false,
             message: `Auto-sync failed: ${syncErr.message}`,
+          };
+        }
+      } else if (appConfig.caddy.autoReloadLocal && appConfig.crl.outputPath) {
+        try {
+          syncResult = await caddySshService.syncLocalCaddy();
+        } catch (syncErr: any) {
+          console.warn('Local Caddy reload on revoke failed:', syncErr.message);
+          syncResult = {
+            success: false,
+            message: `Local reload failed: ${syncErr.message}`,
           };
         }
       }
@@ -260,6 +284,12 @@ async function startServer() {
           syncResult = await caddySshService.syncCaddy(caddyConfig);
         } catch (syncErr: any) {
           console.warn('Auto-sync to Caddy on cert delete failed:', syncErr.message);
+        }
+      } else if (appConfig.caddy.autoReloadLocal && appConfig.crl.outputPath) {
+        try {
+          syncResult = await caddySshService.syncLocalCaddy();
+        } catch (syncErr: any) {
+          console.warn('Local Caddy reload on cert delete failed:', syncErr.message);
         }
       }
 
@@ -323,10 +353,10 @@ async function startServer() {
       const toSave: any = {
         host: body.host?.trim() || '',
         port: parseInt(body.port, 10) || 22,
-        username: body.username?.trim() || 'root',
+        username: body.username?.trim() || '',
         authType: body.authType === 'key' ? 'key' : 'password',
-        remoteCertsDir: body.remoteCertsDir?.trim() || '/etc/caddy/certs',
-        reloadCommand: body.reloadCommand?.trim() || 'sudo systemctl reload caddy',
+        remoteCertsDir: body.remoteCertsDir?.trim() || appConfig.caddy.remoteCertsDir,
+        reloadCommand: body.reloadCommand?.trim() || appConfig.caddy.reloadCmd,
         autoSyncOnRevoke: Boolean(body.autoSyncOnRevoke),
       };
 
@@ -400,6 +430,18 @@ async function startServer() {
     }
   });
 
+  app.post('/api/caddy/sync-local', async (_req, res) => {
+    try {
+      const result = await caddySshService.syncLocalCaddy();
+      res.status(result.success ? 200 : 400).json(result);
+    } catch (err: any) {
+      res.status(500).json({
+        success: false,
+        message: `Local sync failed: ${err.message}`,
+      });
+    }
+  });
+
   // ---------------- VITE OR STATIC SERVING ----------------
   if (process.env.NODE_ENV !== 'production') {
     const { createServer: createViteServer } = await import('vite');
@@ -418,8 +460,8 @@ async function startServer() {
     }
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Pro mTLS Manager server listening on http://0.0.0.0:${PORT}`);
+  app.listen(PORT, HOST, () => {
+    console.log(`Pro mTLS Manager server listening on http://${HOST}:${PORT}`);
   });
 }
 

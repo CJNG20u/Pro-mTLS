@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Loader2, Plus, Shield, KeyRound, Server, FileText, CheckCircle2, AlertTriangle } from 'lucide-react';
-import { CaDetails, StoredClientCert, AuthStatus } from './types.ts';
+import { CaDetails, StoredClientCert, AuthStatus, SystemConfig } from './types.ts';
 import { api, setStoredToken } from './services/api.ts';
 import { TopBar } from './components/TopBar.tsx';
 import { CaStatusCard } from './components/CaStatusCard.tsx';
@@ -26,6 +26,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'certificates' | 'caddy' | 'crl' | 'settings'>('dashboard');
   const [ca, setCa] = useState<CaDetails | null>(null);
   const [certs, setCerts] = useState<StoredClientCert[]>([]);
+  const [systemConfig, setSystemConfig] = useState<SystemConfig | null>(null);
   const [authStatus, setAuthStatus] = useState<AuthStatus>({ authEnabled: false, authenticated: true });
   const [loading, setLoading] = useState(true);
 
@@ -50,12 +51,14 @@ export default function App() {
       setAuthStatus(auth);
 
       if (!auth.authEnabled || auth.authenticated) {
-        const [caData, certsData] = await Promise.all([
+        const [caData, certsData, sysCfg] = await Promise.all([
           api.getCaDetails(),
           api.getCertificates(),
+          api.getSystemConfig(),
         ]);
         setCa(caData);
         setCerts(certsData);
+        setSystemConfig(sysCfg);
       }
     } catch (e: any) {
       console.error('Failed to load dashboard data', e);
@@ -220,7 +223,7 @@ export default function App() {
 
         {/* Tab 3: Caddy Server Integration */}
         {activeTab === 'caddy' && (
-          <CaddySyncPanel />
+          <CaddySyncPanel systemConfig={systemConfig} />
         )}
 
         {/* Tab 4: CRL & Trust */}
@@ -233,6 +236,7 @@ export default function App() {
           <SettingsPanel
             authStatus={authStatus}
             onAuthUpdated={loadData}
+            systemConfig={systemConfig}
           />
         )}
       </main>
@@ -270,12 +274,14 @@ export default function App() {
         onClose={() => setIsInitCaOpen(false)}
         onSuccess={handleCaSuccess}
         existingCa={ca}
+        systemConfig={systemConfig}
       />
 
       <IssueCertModal
         isOpen={isIssueCertOpen}
         onClose={() => setIsIssueCertOpen(false)}
         onSuccess={handleCertIssued}
+        systemConfig={systemConfig}
         onOpenInstallGuide={() => {
           setIsIssueCertOpen(false);
           setIsInstallGuideOpen(true);

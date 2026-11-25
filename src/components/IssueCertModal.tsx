@@ -1,13 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { KeyRound, Eye, EyeOff, Sparkles, Download, Check, Copy, AlertCircle, Loader2, ShieldCheck, HelpCircle, Globe, Unlock } from 'lucide-react';
 import { api } from '../services/api.ts';
-import { StoredClientCert } from '../types.ts';
+import { StoredClientCert, SystemConfig } from '../types.ts';
 
 interface IssueCertModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: (cert: StoredClientCert) => void;
   onOpenInstallGuide: () => void;
+  systemConfig?: SystemConfig | null;
 }
 
 export const IssueCertModal: React.FC<IssueCertModalProps> = ({
@@ -15,13 +16,20 @@ export const IssueCertModal: React.FC<IssueCertModalProps> = ({
   onClose,
   onSuccess,
   onOpenInstallGuide,
+  systemConfig,
 }) => {
+  // Pre-fill order: last hostnames used in this browser, then DEFAULT_ALLOWED_HOSTS from .env
+  const defaultHostLabel = (systemConfig?.defaultAllowedHosts || []).join(', ');
   const [personalizedName, setPersonalizedName] = useState('');
   const HOSTS_KEY = 'pro-mtls:last-allowed-hosts';
   const readLastHosts = () => {
-    try { return localStorage.getItem(HOSTS_KEY) || ''; } catch { return ''; }
+    try { return localStorage.getItem(HOSTS_KEY) || defaultHostLabel; } catch { return defaultHostLabel; }
   };
   const [allowedHostsInput, setAllowedHostsInput] = useState(readLastHosts);
+  useEffect(() => {
+    if (isOpen && !allowedHostsInput) setAllowedHostsInput(readLastHosts());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, defaultHostLabel]);
   const [validityDays, setValidityDays] = useState<number>(365);
   const [customDays, setCustomDays] = useState<string>('');
   const [p12Password, setP12Password] = useState('');
@@ -68,7 +76,7 @@ export const IssueCertModal: React.FC<IssueCertModalProps> = ({
     setError(null);
 
     if (!personalizedName.trim()) {
-      setError('A personalized name/identifier is required (e.g. Alex-Pixel9Pro).');
+      setError('A personalized name/identifier is required (e.g. alice-laptop or mobile-device-01).');
       return;
     }
 
@@ -180,7 +188,7 @@ export const IssueCertModal: React.FC<IssueCertModalProps> = ({
                   type="text"
                   value={allowedHostsInput}
                   onChange={(e) => setAllowedHostsInput(e.target.value)}
-                  placeholder="e.g., *.example.com or photos.example.com, music.example.com"
+                  placeholder="e.g., *.example.com or app.example.com, media.example.com"
                   className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 font-mono"
                 />
                 <p className="text-[11px] text-slate-500 mt-1">
@@ -335,7 +343,7 @@ export const IssueCertModal: React.FC<IssueCertModalProps> = ({
                   type="text"
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  placeholder="e.g. Primary smartphone for Alex with WireGuard & homelab access"
+                  placeholder="e.g. Primary smartphone for Alice with internal network access"
                   className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
                 />
               </div>

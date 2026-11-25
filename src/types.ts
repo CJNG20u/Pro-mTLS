@@ -77,3 +77,22 @@ export interface AuthStatus {
   authEnabled: boolean;
   authenticated: boolean;
 }
+
+export interface SystemConfig {
+  dataDir: string;
+  crlOutputPath: string | null;
+  caCertOutputPath: string | null;
+  caddyReloadCmd: string;
+  caddyAutoReloadLocal: boolean;
+  caddyRemoteCertsDir: string;
+  defaultAllowedHosts: string[];
+  caDefaults: {
+    commonName: string;
+    organization: string;
+    organizationalUnit: string;
+    country: string;
+    validityDays: number;
+    keySize: 2048 | 4096;
+    autoInit: boolean;
+  };
+}

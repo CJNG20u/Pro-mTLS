@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { Lock, Unlock, Key, HardDrive, Check, Copy, AlertCircle, Shield, CheckCircle2 } from 'lucide-react';
 import { api, getStoredToken } from '../services/api.ts';
-import { AuthStatus } from '../types.ts';
+import { AuthStatus, SystemConfig } from '../types.ts';
 
 interface SettingsPanelProps {
   authStatus: AuthStatus;
   onAuthUpdated: () => void;
+  systemConfig?: SystemConfig | null;
 }
 
-export const SettingsPanel: React.FC<SettingsPanelProps> = ({ authStatus, onAuthUpdated }) => {
+export const SettingsPanel: React.FC<SettingsPanelProps> = ({ authStatus, onAuthUpdated, systemConfig }) => {
+  const dataDirDisplay = (systemConfig?.dataDir || './data').replace(/\/+$/, '');
   const [enabled, setEnabled] = useState(authStatus.authEnabled);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -220,28 +222,39 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ authStatus, onAuth
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
           <div className="bg-slate-950 p-3 rounded-lg border border-slate-800">
-            <span className="text-slate-400 block font-mono text-[11px]">./pki_storage/ca/</span>
+            <span className="text-slate-400 block font-mono text-[11px]">{dataDirDisplay}/ca/</span>
             <span className="text-slate-200 block font-medium mt-1">Root CA Trust Store</span>
             <span className="text-[11px] text-slate-500">Contains ca.crt (public) and ca.key (0600 private key).</span>
           </div>
 
           <div className="bg-slate-950 p-3 rounded-lg border border-slate-800">
-            <span className="text-slate-400 block font-mono text-[11px]">./pki_storage/certs/</span>
+            <span className="text-slate-400 block font-mono text-[11px]">{dataDirDisplay}/certs/</span>
             <span className="text-slate-200 block font-medium mt-1">Client Certs & .p12 Bundles</span>
             <span className="text-[11px] text-slate-500">Organized per certificate ID with bundle.p12 archives.</span>
           </div>
 
           <div className="bg-slate-950 p-3 rounded-lg border border-slate-800">
-            <span className="text-slate-400 block font-mono text-[11px]">./pki_storage/crl/</span>
+            <span className="text-slate-400 block font-mono text-[11px]">{dataDirDisplay}/crl/</span>
             <span className="text-slate-200 block font-medium mt-1">OpenSSL CRL Database</span>
             <span className="text-[11px] text-slate-500">RFC 5280 crl.pem, serial, crlnumber, and index.txt.</span>
           </div>
 
           <div className="bg-slate-950 p-3 rounded-lg border border-slate-800">
-            <span className="text-slate-400 block font-mono text-[11px]">./pki_storage/config.json</span>
+            <span className="text-slate-400 block font-mono text-[11px]">{dataDirDisplay}/config.json</span>
             <span className="text-slate-200 block font-medium mt-1">Caddy Sync & Security Config</span>
-            <span className="text-[11px] text-slate-500">Encrypted SSH host configurations and auth settings.</span>
+            <span className="text-[11px] text-slate-500">SSH host configurations and dashboard auth settings.</span>
           </div>
+
+          {systemConfig?.crlOutputPath && (
+            <div className="bg-slate-950 p-3 rounded-lg border border-slate-800 sm:col-span-2">
+              <span className="text-cyan-400 block font-mono text-[11px]">{systemConfig.crlOutputPath}</span>
+              <span className="text-slate-200 block font-medium mt-1">Local CRL Export Target (CRL_OUTPUT_PATH)</span>
+              <span className="text-[11px] text-slate-500">
+                Automatically updated whenever a certificate is revoked. Reload command:{' '}
+                <code className="font-mono text-slate-300">{systemConfig.caddyReloadCmd}</code>
+              </span>
+            </div>
+          )}
         </div>
       </div>
     </div>

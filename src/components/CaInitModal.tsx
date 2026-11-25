@@ -1,13 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Shield, AlertTriangle, Loader2, RotateCcw } from 'lucide-react';
 import { api } from '../services/api.ts';
-import { CaDetails } from '../types.ts';
+import { CaDetails, SystemConfig } from '../types.ts';
 
 interface CaInitModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: (ca: CaDetails) => void;
   existingCa: CaDetails | null;
+  systemConfig?: SystemConfig | null;
 }
 
 export const CaInitModal: React.FC<CaInitModalProps> = ({
@@ -15,23 +16,46 @@ export const CaInitModal: React.FC<CaInitModalProps> = ({
   onClose,
   onSuccess,
   existingCa,
+  systemConfig,
 }) => {
+  const defaults = systemConfig?.caDefaults;
+  const presetDays = [365, 730, 1825, 3650];
+
   const [commonName, setCommonName] = useState(
-    existingCa?.commonName || 'Pro mTLS Private Root CA'
+    existingCa?.commonName || defaults?.commonName || 'Pro mTLS Private Root CA'
   );
   const [organization, setOrganization] = useState(
-    existingCa?.organization || 'Homelab Secure Infrastructure'
+    existingCa?.organization || defaults?.organization || 'Private Infrastructure'
   );
   const [organizationalUnit, setOrganizationalUnit] = useState(
-    existingCa?.organizationalUnit || 'Private Certificate Authority'
+    existingCa?.organizationalUnit || defaults?.organizationalUnit || 'Private Certificate Authority'
   );
-  const [country, setCountry] = useState(existingCa?.country || 'US');
+  const [country, setCountry] = useState(existingCa?.country || defaults?.country || 'US');
   const [validityDays, setValidityDays] = useState<number>(3650); // 10 years default for CA
   const [customDays, setCustomDays] = useState<string>('');
-  const [keySize, setKeySize] = useState<2048 | 4096>(2048);
+  const [keySize, setKeySize] = useState<2048 | 4096>(defaults?.keySize === 4096 ? 4096 : 2048);
   const [wipeExistingCerts, setWipeExistingCerts] = useState<boolean>(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setCommonName(existingCa?.commonName || defaults?.commonName || 'Pro mTLS Private Root CA');
+    setOrganization(existingCa?.organization || defaults?.organization || 'Private Infrastructure');
+    setOrganizationalUnit(
+      existingCa?.organizationalUnit || defaults?.organizationalUnit || 'Private Certificate Authority'
+    );
+    setCountry(existingCa?.country || defaults?.country || 'US');
+    const configuredDays = defaults?.validityDays || 3650;
+    if (presetDays.includes(configuredDays)) {
+      setValidityDays(configuredDays);
+      setCustomDays('');
+    } else {
+      setValidityDays(-1);
+      setCustomDays(String(configuredDays));
+    }
+    setKeySize(defaults?.keySize === 4096 ? 4096 : 2048);
+  }, [isOpen, existingCa, defaults]);
 
   if (!isOpen) return null;
 
@@ -152,7 +176,7 @@ export const CaInitModal: React.FC<CaInitModalProps> = ({
                 type="text"
                 value={organization}
                 onChange={(e) => setOrganization(e.target.value)}
-                placeholder="e.g. Homelab Infrastructure"
+                placeholder="e.g. Private Infrastructure"
                 required
                 className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none focus:border-emerald-500"
               />

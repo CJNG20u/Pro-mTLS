@@ -1,8 +1,15 @@
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import crypto from 'node:crypto';
+import { exec } from 'node:child_process';
+import { promisify } from 'node:util';
 import { Client } from 'ssh2';
 import type { ConnectConfig } from 'ssh2';
 import { pkiEngine } from './pki-engine.ts';
+import { appConfig } from './config.ts';
+
+const execAsync = promisify(exec);
 
 export interface CaddySyncConfig {
   host: string;
@@ -27,16 +34,35 @@ export interface SyncResult {
 }
 
 export class CaddySshService {
+  private resolveFallbackSshKeyPath(): string | null {
+    const candidates: string[] = [];
+    if (appConfig.sshKeyPath) {
+      candidates.push(appConfig.sshKeyPath);
+    }
+    const sshDir = path.join(os.homedir(), '.ssh');
+    candidates.push(path.join(sshDir, 'id_ed25519'), path.join(sshDir, 'id_rsa'));
+
+    for (const candidate of candidates) {
+      if (fs.existsSync(candidate)) {
+        return candidate;
+      }
+    }
+    return null;
+  }
+
   private createSshConfig(config: CaddySyncConfig): ConnectConfig {
     if (!config.host || !config.username) {
       throw new Error('Host and Username are required for SSH connection.');
     }
 
     let keyContent = config.privateKey;
-    if ((!keyContent || !keyContent.trim()) && fs.existsSync('/root/.ssh/id_rsa')) {
-      try {
-        keyContent = fs.readFileSync('/root/.ssh/id_rsa', 'utf8');
-      } catch {}
+    if (!keyContent || !keyContent.trim()) {
+      const fallbackPath = this.resolveFallbackSshKeyPath();
+      if (fallbackPath) {
+        try {
+          keyContent = fs.readFileSync(fallbackPath, 'utf8');
+        } catch {}
+      }
     }
 
     const sshConfig: ConnectConfig = {
@@ -71,11 +97,9 @@ export class CaddySshService {
 
       sshConfig.privateKey = key;
     } else {
-      try {
-        sshConfig.privateKey = fs.readFileSync('/root/.ssh/id_rsa', 'utf8');
-      } catch (e) {
-        throw new Error('SSH Private Key is required for key authentication and /root/.ssh/id_rsa could not be read.');
-      }
+      throw new Error(
+        'SSH Private Key is required for key authentication. Paste a key in the UI or configure SSH_KEY_PATH in .env.'
+      );
     }
 
     return sshConfig;
@@ -209,13 +233,13 @@ export class CaddySshService {
       conn.on('ready', () => {
         addLog(`Authenticated as ${config.username}. Writing certificates via SSH command...`);
 
-        const remoteDir = (config.remoteCertsDir || '/etc/caddy/certs').replace(/\/+$/, '');
+        const remoteDir = (config.remoteCertsDir || appConfig.caddy.remoteCertsDir).replace(/\/+$/, '');
         const caRemotePath = `${remoteDir}/ca.crt`;
         const crlRemotePath = `${remoteDir}/crl.pem`;
 
         const caBase64 = Buffer.from(caPem, 'utf8').toString('base64');
         const crlBase64 = Buffer.from(crlPem, 'utf8').toString('base64');
-        const reloadCmd = config.reloadCommand?.trim() || 'systemctl reload caddy';
+        const reloadCmd = config.reloadCommand?.trim() || appConfig.caddy.reloadCmd;
 
         const remoteCommand = `
           mkdir -p "${remoteDir}" && \
@@ -268,15 +292,97 @@ export class CaddySshService {
     });
   }
 
-  public generateCaddyfileSnippet(remoteCertsDir: string = '/etc/caddy/certs'): string {
-    const cleanDir = (remoteCertsDir || '/etc/caddy/certs').replace(/\/+$/, '');
+  /**
+   * Publishes ca.crt and crl.pem directly on the local host (for single-host bare-metal Debian installs)
+   * and executes CADDY_RELOAD_CMD.
+   */
+  public async syncLocalCaddy(): Promise<SyncResult> {
+    const timestamp = new Date().toISOString();
+    const filesUploaded: string[] = [];
+    const logLines: string[] = [];
+    const addLog = (msg: string) => logLines.push(`[${new Date().toLocaleTimeString()}] ${msg}`);
+
+    if (!appConfig.crl.outputPath) {
+      return {
+        success: false,
+        message: 'CRL_OUTPUT_PATH is not configured in .env. Set CRL_OUTPUT_PATH to enable local bare-metal Caddy sync.',
+        log: 'CRL_OUTPUT_PATH is unset.',
+        timestamp,
+        filesUploaded,
+      };
+    }
+
+    try {
+      const caPem = pkiEngine.getCaCertPem();
+      const crlPem = pkiEngine.getCrlPem();
+
+      const crlTarget = appConfig.crl.outputPath;
+      const caTarget = appConfig.crl.caCertOutputPath || path.join(path.dirname(crlTarget), 'ca.crt');
+
+      for (const target of [caTarget, crlTarget]) {
+        const dir = path.dirname(target);
+        if (!fs.existsSync(dir)) {
+          fs.mkdirSync(dir, { recursive: true, mode: 0o755 });
+        }
+      }
+
+      fs.writeFileSync(caTarget, caPem, { mode: 0o644, encoding: 'utf8' });
+      addLog(`Wrote Root CA certificate to ${caTarget}`);
+      filesUploaded.push(caTarget);
+
+      fs.writeFileSync(crlTarget, crlPem, { mode: 0o644, encoding: 'utf8' });
+      addLog(`Wrote CRL to ${crlTarget}`);
+      filesUploaded.push(crlTarget);
+
+      const reloadCmd = appConfig.caddy.reloadCmd;
+      addLog(`Executing local Caddy reload command: ${reloadCmd}`);
+      const { stdout, stderr } = await execAsync(reloadCmd, { timeout: 30000 });
+      const reloadOutput = [stdout, stderr].filter(Boolean).join('\n').trim();
+      addLog('Local Caddy reloaded successfully.');
+
+      const fullLog = logLines.join('\n');
+      pkiEngine.saveCaddyConfig({
+        lastSyncAt: timestamp,
+        lastSyncStatus: 'success',
+        lastSyncLog: fullLog,
+      });
+
+      return {
+        success: true,
+        message: 'Local CA/CRL published and Caddy reloaded successfully!',
+        log: fullLog,
+        timestamp,
+        filesUploaded,
+        reloadOutput: reloadOutput || undefined,
+      };
+    } catch (err: any) {
+      addLog(`Local Caddy sync failed: ${err.message}`);
+      const fullLog = logLines.join('\n');
+      pkiEngine.saveCaddyConfig({
+        lastSyncAt: timestamp,
+        lastSyncStatus: 'failed',
+        lastSyncLog: fullLog,
+      });
+      return {
+        success: false,
+        message: `Local Caddy sync failed: ${err.message}`,
+        log: fullLog,
+        timestamp,
+        filesUploaded,
+      };
+    }
+  }
+
+  public generateCaddyfileSnippet(remoteCertsDir: string = appConfig.caddy.remoteCertsDir): string {
+    const cleanDir = (remoteCertsDir || appConfig.caddy.remoteCertsDir).replace(/\/+$/, '');
+    const wildcardHost = appConfig.caddy.defaultAllowedHosts[0] || '*.example.com';
     return `# Caddyfile mTLS Configuration with Pro mTLS Manager
 # Replace app.example.com with your own hostname
 app.example.com {
     tls {
         client_auth {
             mode require_and_verify
-            # Root CA certificate uploaded by Pro mTLS Manager
+            # Root CA certificate managed by Pro mTLS Manager
             trusted_ca_cert_file ${cleanDir}/ca.crt
             # CRL checking needs the caddy-revocation-validator plugin (build Caddy with xcaddy)
             verifier revocation {
@@ -293,10 +399,10 @@ app.example.com {
         }
     }
 
-    @forbidden not expression \`{http.request.tls.client.subject}.contains("OU=host:*.example.com") || {http.request.tls.client.subject}.contains("OU=host:" + {http.request.host})\`
+    @forbidden not expression \`{http.request.tls.client.subject}.contains("OU=host:${wildcardHost}") || {http.request.tls.client.subject}.contains("OU=host:" + {http.request.host})\`
     respond @forbidden "403 Forbidden: Certificate not authorized for this hostname" 403
 
-    # Proxy to your internal homelab service
+    # Proxy to your internal service
     reverse_proxy localhost:8080
 }`;
   }

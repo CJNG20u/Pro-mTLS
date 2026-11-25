@@ -7,3 +7,4 @@ pki_storage/
 *.pem
 *.p12
 *.bak
+data/

@@ -54,27 +54,57 @@ git pull
 docker compose up -d --build
 ```
 
-### Without Docker
+### Without Docker (bare metal / LXC + systemd)
 
-Requirements: Node.js 22+ and the `openssl` command-line tool.
+Requirements: Debian/Ubuntu, Node.js 20+ (22 LTS recommended) and the `openssl` command-line tool.
 
 ```bash
-git clone https://github.com/CJNG20u/Pro-mTLS.git
-cd Pro-mTLS
-npm install
-npm run build
-npm start
+sudo git clone https://github.com/CJNG20u/Pro-mTLS.git /opt/pro-mtls-manager
+cd /opt/pro-mtls-manager
+sudo cp .env.example .env && sudo chmod 600 .env   # optional, edit as needed
+sudo ./install.sh                                   # checks prereqs, installs deps, builds the UI
 ```
 
-### Configuration
+`install.sh` is safe to run again after `git pull`. It finishes by printing the steps to enable the systemd service:
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PORT`   | `3000`  | Port the web UI listens on |
+```bash
+sudo cp pro-mtls-manager.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now pro-mtls-manager
+journalctl -u pro-mtls-manager -f
+```
+
+The unit expects the app in `/opt/pro-mtls-manager`. If you installed it somewhere else, edit the paths in the `.service` file.
+
+Prefer to run it by hand? `npm install && npm run build && npm start`.
+
+### Configuration (optional)
+
+Everything works out of the box. To change defaults, copy `.env.example` to `.env` and uncomment what you need. Docker Compose picks up `.env` automatically.
+
+| Variable | Default | What it does |
+|----------|---------|--------------|
+| `PORT` / `HOST` | `3000` / `0.0.0.0` | Where the web UI listens (bare metal only; in Docker change the `ports:` mapping) |
+| `DATA_DIR` | `./pki_storage` | Where the CA, certs, CRL and settings are stored (fixed to `/app/pki_storage` in Docker) |
+| `CA_AUTO_INIT` | `false` | Create the root CA automatically on first start |
+| `CA_COMMON_NAME`, `CA_ORGANIZATION`, `CA_ORGANIZATIONAL_UNIT`, `CA_COUNTRY`, `CA_VALIDITY_DAYS`, `CA_KEY_SIZE` | see `.env.example` | Root CA details for auto-init; also pre-filled in the Initialize CA form |
+| `DEFAULT_ALLOWED_HOSTS` | *(empty)* | Comma-separated hostnames pre-filled when issuing certs, e.g. `*.example.com` |
+| `CRL_VALIDITY_DAYS` | `30` | How long each generated CRL is valid |
+| `CRL_OUTPUT_PATH`, `CA_CERT_OUTPUT_PATH` | *(off)* | Also write `crl.pem` / `ca.crt` to these paths, for Caddy on the **same machine** |
+| `CADDY_AUTO_RELOAD_LOCAL` | `false` | Run `CADDY_RELOAD_CMD` locally after every revoke/delete (needs `CRL_OUTPUT_PATH`) |
+| `CADDY_REMOTE_CERTS_DIR` | `/etc/caddy/certs` | Default certs folder in the Server Sync panel |
+| `CADDY_RELOAD_CMD` | `sudo systemctl reload caddy` | Command used to reload Caddy (remote SSH default and local reload) |
+| `SSH_KEY_PATH` | *(none)* | SSH key used when none is entered in the UI. Otherwise `~/.ssh/id_ed25519`, then `~/.ssh/id_rsa` |
+| `AUTH_SALT` | `mtls_salt` | Salt for the dashboard password hash. Set it **before** enabling the password; changing it later means setting the password again |
+| `STRICT_ENV_VALIDATION` | `false` | Refuse to start unless the core variables are set explicitly |
+
+#### Caddy on the same machine
+
+If Caddy runs on the same host as Pro mTLS Manager (bare metal), you don't need SSH at all. Set `CRL_OUTPUT_PATH=/etc/caddy/certs/crl.pem` and `CA_CERT_OUTPUT_PATH=/etc/caddy/certs/ca.crt`. The Server Sync page then shows a **Publish & Reload Local Caddy** button, and with `CADDY_AUTO_RELOAD_LOCAL=true` Caddy is reloaded automatically after every revocation.
 
 ### Your data: back it up
 
-Everything the app creates (the CA **private key**, issued certificates, the CRL and settings) is stored in `./pki_storage`, which is mounted into the container at `/app/pki_storage`.
+Everything the app creates (the CA **private key**, issued certificates, the CRL and settings) is stored in `./pki_storage` (or `DATA_DIR`). In Docker it's mounted into the container at `/app/pki_storage`.
 
 > ⚠️ Anyone with `pki_storage/ca` can issue certificates your Caddy server will trust. Keep it private, back it up off the host, and **never commit it to Git**. `.gitignore` already excludes it.
 

@@ -16,10 +16,18 @@ import {
   Eye,
   EyeOff,
 } from 'lucide-react';
-import { CaddyConfig, SyncResult } from '../types.ts';
+import { CaddyConfig, SyncResult, SystemConfig } from '../types.ts';
 import { api } from '../services/api.ts';
 
-export const CaddySyncPanel: React.FC = () => {
+interface CaddySyncPanelProps {
+  systemConfig?: SystemConfig | null;
+}
+
+export const CaddySyncPanel: React.FC<CaddySyncPanelProps> = ({ systemConfig }) => {
+  const defaultCertsDir = systemConfig?.caddyRemoteCertsDir || '/etc/caddy/certs';
+  const defaultReloadCmd = systemConfig?.caddyReloadCmd || 'sudo systemctl reload caddy';
+  const defaultWildcardHost = systemConfig?.defaultAllowedHosts?.[0] || '*.example.com';
+
   const [config, setConfig] = useState<CaddyConfig>({
     host: '',
     port: 22,
@@ -28,8 +36,8 @@ export const CaddySyncPanel: React.FC = () => {
     password: '',
     privateKey: '',
     passphrase: '',
-    remoteCertsDir: '/etc/caddy/certs',
-    reloadCommand: 'sudo systemctl reload caddy',
+    remoteCertsDir: defaultCertsDir,
+    reloadCommand: defaultReloadCmd,
     autoSyncOnRevoke: true,
   });
 
@@ -68,8 +76,8 @@ export const CaddySyncPanel: React.FC = () => {
         ...data,
         port: data.port || 22,
         authType: data.authType || 'password',
-        remoteCertsDir: data.remoteCertsDir || '/etc/caddy/certs',
-        reloadCommand: data.reloadCommand || 'sudo systemctl reload caddy',
+        remoteCertsDir: data.remoteCertsDir || defaultCertsDir,
+        reloadCommand: data.reloadCommand || defaultReloadCmd,
         autoSyncOnRevoke: data.autoSyncOnRevoke ?? true,
       }));
       if (data.hasPassphrase || data.passphrase) {
@@ -151,6 +159,25 @@ export const CaddySyncPanel: React.FC = () => {
     }
   };
 
+  const handleLocalSync = async () => {
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const res = await api.syncLocalCaddy();
+      setSyncResult(res);
+      loadConfig();
+    } catch (err: any) {
+      setSyncResult({
+        success: false,
+        message: err.message || 'Local Caddy sync failed',
+        timestamp: new Date().toISOString(),
+        log: err.message,
+      });
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const caddyfileSnippet = `# Caddyfile mTLS Configuration with Pro mTLS Manager
 # Replace app.example.com with your own hostname
 app.example.com {
@@ -158,7 +185,7 @@ app.example.com {
         client_auth {
             mode require_and_verify
             # Root CA certificate uploaded by Pro mTLS Manager
-            trusted_ca_cert_file ${config.remoteCertsDir || '/etc/caddy/certs'}/ca.crt
+            trusted_ca_cert_file ${config.remoteCertsDir || defaultCertsDir}/ca.crt
             # CRL checking needs the caddy-revocation-validator plugin (build Caddy with xcaddy)
             verifier revocation {
                 mode crl_only
@@ -166,18 +193,18 @@ app.example.com {
                     work_dir /var/lib/caddy/crl-work
                     storage_type memory
                     signature_validation_mode verify
-                    trusted_signature_cert_file ${config.remoteCertsDir || '/etc/caddy/certs'}/ca.crt
+                    trusted_signature_cert_file ${config.remoteCertsDir || defaultCertsDir}/ca.crt
                     # CRL maintained by Pro mTLS Manager
-                    crl_file ${config.remoteCertsDir || '/etc/caddy/certs'}/crl.pem
+                    crl_file ${config.remoteCertsDir || defaultCertsDir}/crl.pem
                 }
             }
         }
     }
 
-    @forbidden not expression \`{http.request.tls.client.subject}.contains("OU=host:*.example.com") || {http.request.tls.client.subject}.contains("OU=host:" + {http.request.host})\`
+    @forbidden not expression \`{http.request.tls.client.subject}.contains("OU=host:${defaultWildcardHost}") || {http.request.tls.client.subject}.contains("OU=host:" + {http.request.host})\`
     respond @forbidden "403 Forbidden: Certificate not authorized for this hostname" 403
 
-    # Proxy to your internal homelab service
+    # Proxy to your internal service
     reverse_proxy localhost:8080
 }`;
 
@@ -223,7 +250,18 @@ app.example.com {
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
+            {systemConfig?.crlOutputPath && (
+              <button
+                onClick={handleLocalSync}
+                disabled={syncing}
+                title={`Write ca.crt & crl.pem locally and run: ${defaultReloadCmd}`}
+                className="px-4 py-2.5 bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-800 disabled:text-slate-500 text-white text-xs font-medium rounded-lg transition-all shadow-sm flex items-center gap-2 cursor-pointer disabled:cursor-not-allowed"
+              >
+                {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                <span>Publish & Reload Local Caddy</span>
+              </button>
+            )}
             <button
               onClick={handleManualSync}
               disabled={syncing || !config.host}
@@ -234,7 +272,7 @@ app.example.com {
               ) : (
                 <UploadCloud className="w-4 h-4" />
               )}
-              <span>Sync to Caddy Now</span>
+              <span>Sync to Remote Caddy (SSH)</span>
             </button>
           </div>
         </div>
@@ -457,7 +495,7 @@ app.example.com {
                   type="text"
                   value={config.remoteCertsDir}
                   onChange={(e) => setConfig({ ...config, remoteCertsDir: e.target.value })}
-                  placeholder="/etc/caddy/certs"
+                  placeholder={defaultCertsDir}
                   className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-500 font-mono"
                 />
               </div>
@@ -470,7 +508,7 @@ app.example.com {
                   type="text"
                   value={config.reloadCommand}
                   onChange={(e) => setConfig({ ...config, reloadCommand: e.target.value })}
-                  placeholder="sudo systemctl reload caddy"
+                  placeholder={defaultReloadCmd}
                   className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-500 font-mono"
                 />
               </div>

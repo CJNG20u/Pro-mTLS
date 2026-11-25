@@ -6,8 +6,15 @@ services:
     restart: unless-stopped
     ports:
       - "3000:3000"
+    # Optional settings: copy .env.example to .env and edit (see README)
+    env_file:
+      - path: .env
+        required: false
     environment:
+      # These are fixed inside the container; change the host port in "ports" instead
       - PORT=3000
+      - HOST=0.0.0.0
+      - DATA_DIR=/app/pki_storage
       - TZ=America/New_York
     volumes:
       # Your private CA, issued certs, CRL and settings. BACK THIS UP.

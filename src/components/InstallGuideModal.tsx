@@ -17,7 +17,7 @@ curl -v \\
   --cacert ca.crt \\
   --cert client.crt \\
   --key client.key \\
-  https://secure.homelab.local/
+  https://secure.example.com/
 
 # Or convert .p12 directly if needed:
 openssl pkcs12 -in client.p12 -clcerts -nokeys -out client.crt
@@ -103,7 +103,7 @@ openssl pkcs12 -in client.p12 -nocerts -nodes -out client.key`;
                   <strong className="text-white">Enter .p12 Bundle Password:</strong> When prompted for <em>"Enter the password for the identity certificate"</em>, type or paste the password you generated during certificate issuance.
                 </li>
                 <li>
-                  <strong className="text-white">Browse with Safari/Chrome:</strong> When visiting your Caddy-protected homelab domain, iOS will display a prompt asking: <em>"Select an identity to access secure.homelab.local"</em>. Select your certificate and you are in!
+                  <strong className="text-white">Browse with Safari/Chrome:</strong> When visiting your Caddy-protected domain, iOS will display a prompt asking: <em>"Select an identity to access secure.example.com"</em>. Select your certificate and you are in!
                 </li>
               </ol>
             </div>
@@ -129,7 +129,7 @@ openssl pkcs12 -in client.p12 -nocerts -nodes -out client.key`;
                   <strong className="text-white">Select File & Enter Password:</strong> Pick the downloaded <code className="font-mono text-emerald-400">.p12</code> file and input the bundle password when prompted.
                 </li>
                 <li>
-                  <strong className="text-white">Name Certificate:</strong> Give it a friendly name (e.g. <em>Alex-Pixel9Pro</em>) and tap OK.
+                  <strong className="text-white">Name Certificate:</strong> Give it a friendly name (e.g. <em>alice-phone</em>) and tap OK.
                 </li>
               </ol>
             </div>

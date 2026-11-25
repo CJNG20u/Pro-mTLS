@@ -1,12 +1,13 @@
 import crypto from 'node:crypto';
 import type { Request, Response, NextFunction } from 'express';
 import { pkiEngine } from './pki-engine.ts';
+import { appConfig } from './config.ts';
 
 // In-memory active session tokens mapped to creation time
 const activeTokens = new Set<string>();
 
 export function hashPassword(password: string): string {
-  return crypto.createHash('sha256').update(`mtls_salt_${password}`).digest('hex');
+  return crypto.createHash('sha256').update(`${appConfig.authSalt}_${password}`).digest('hex');
 }
 
 export function generateSessionToken(): string {
