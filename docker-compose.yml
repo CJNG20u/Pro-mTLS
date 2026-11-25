@@ -1,0 +1,18 @@
+services:
+  pro-mtls-manager:
+    build: .
+    image: pro-mtls-manager:latest
+    container_name: pro-mtls-manager
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - TZ=America/New_York
+    volumes:
+      # Your private CA, issued certs, CRL and settings. BACK THIS UP.
+      - ./pki_storage:/app/pki_storage
+      # Optional: SSH key for syncing to Caddy. The app falls back to this path
+      # when no key is pasted in the Caddy settings. Uncomment only if the file
+      # exists on the host (otherwise Docker creates an empty folder there).
+      # - /root/.ssh/id_rsa:/root/.ssh/id_rsa:ro

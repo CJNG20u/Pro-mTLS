@@ -1,0 +1,12 @@
+node_modules
+dist
+pki_storage
+.git
+.env
+.env.*
+*.key
+*.pem
+*.p12
+*.bak
+Dockerfile
+docker-compose.yml
