@@ -163,7 +163,7 @@ async function startServer() {
       const rawPass = p12Password !== undefined ? p12Password : password;
       const normalizedPassword = typeof rawPass === 'string' && rawPass.length > 0 ? rawPass : null;
 
-      let parsedAllowedHosts: string[] = ['*.xlabserver.com'];
+      let parsedAllowedHosts: string[] = [];
       if (Array.isArray(allowedHosts)) {
         const cleaned = allowedHosts.map((h: unknown) => (typeof h === 'string' ? h.trim() : '')).filter(Boolean);
         if (cleaned.length > 0) {
@@ -174,6 +174,10 @@ async function startServer() {
         if (cleaned.length > 0) {
           parsedAllowedHosts = cleaned;
         }
+      }
+
+      if (parsedAllowedHosts.length === 0) {
+        return res.status(400).json({ error: 'At least one allowed hostname is required (e.g. *.example.com).' });
       }
 
       const parsedValidity = parseInt(validityDays, 10) || 365;
