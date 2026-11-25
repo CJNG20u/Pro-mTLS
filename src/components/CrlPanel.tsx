@@ -69,7 +69,7 @@ export const CrlPanel: React.FC = () => {
               </h2>
               <p className="text-xs text-slate-400 mt-1 leading-relaxed max-w-2xl">
                 The CRL contains the serial numbers of all certificates that have been revoked prior to expiration.
-                Caddy server reads this list via <code className="font-mono text-slate-300">crl_file</code> to deny TLS handshakes instantly.
+                Caddy reads this list via <code className="font-mono text-slate-300">crl_file</code> (caddy-revocation-validator plugin) to deny revoked certificates.
               </p>
             </div>
           </div>

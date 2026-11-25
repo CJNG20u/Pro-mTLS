@@ -271,19 +271,29 @@ export class CaddySshService {
   public generateCaddyfileSnippet(remoteCertsDir: string = '/etc/caddy/certs'): string {
     const cleanDir = (remoteCertsDir || '/etc/caddy/certs').replace(/\/+$/, '');
     return `# Caddyfile mTLS Configuration with Pro mTLS Manager
-# Replace yourdomain.homelab with your internal DNS or IP
-secure.homelab.local {
+# Replace app.example.com with your own hostname
+app.example.com {
     tls {
         client_auth {
             mode require_and_verify
             # Root CA certificate uploaded by Pro mTLS Manager
             trusted_ca_cert_file ${cleanDir}/ca.crt
-            # Certificate Revocation List (CRL) maintained by Pro mTLS Manager
-            crl_file ${cleanDir}/crl.pem
+            # CRL checking needs the caddy-revocation-validator plugin (build Caddy with xcaddy)
+            verifier revocation {
+                mode crl_only
+                crl_config {
+                    work_dir /var/lib/caddy/crl-work
+                    storage_type memory
+                    signature_validation_mode verify
+                    trusted_signature_cert_file ${cleanDir}/ca.crt
+                    # CRL maintained by Pro mTLS Manager
+                    crl_file ${cleanDir}/crl.pem
+                }
+            }
         }
     }
 
-    @forbidden not expression \`{http.request.tls.client.subject}.contains("OU=host:*.xlabserver.com") || {http.request.tls.client.subject}.contains("OU=host:" + {http.request.host})\`
+    @forbidden not expression \`{http.request.tls.client.subject}.contains("OU=host:*.example.com") || {http.request.tls.client.subject}.contains("OU=host:" + {http.request.host})\`
     respond @forbidden "403 Forbidden: Certificate not authorized for this hostname" 403
 
     # Proxy to your internal homelab service
