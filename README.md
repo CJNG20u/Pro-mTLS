@@ -2,6 +2,12 @@
 
 [![Docker image](https://github.com/CJNG20u/Pro-mTLS/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/CJNG20u/Pro-mTLS/pkgs/container/pro-mtls)
 
+🐳 **Docker image:** `ghcr.io/cjng20u/pro-mtls:latest` (amd64 + arm64)
+
+```bash
+docker pull ghcr.io/cjng20u/pro-mtls:latest
+```
+
 **A self-hosted private Certificate Authority and mTLS client-certificate dashboard for [Caddy](https://caddyserver.com).**
 
 Lock your self-hosted services so that only devices holding a certificate you issued can connect. Pro mTLS Manager runs your own root CA, issues per-device client certificates as ready-to-install `.p12` bundles, maintains a Certificate Revocation List (CRL), and pushes the CA and CRL to your Caddy server over SSH, so revoking a lost phone takes one click.
