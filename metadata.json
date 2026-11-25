@@ -1,0 +1,6 @@
+{
+  "name": "Pro mTLS Manager",
+  "description": "Private Certificate Authority (CA) and mTLS client certificate management dashboard with encrypted .p12 bundles and Caddy server synchronization.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
