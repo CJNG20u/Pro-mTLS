@@ -1,0 +1,9 @@
+node_modules/
+dist/
+pki_storage/
+.env
+.env.local
+*.key
+*.pem
+*.p12
+*.bak
