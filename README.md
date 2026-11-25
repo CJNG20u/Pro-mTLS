@@ -4,6 +4,8 @@
 
 Lock your self-hosted services so that only devices holding a certificate you issued can connect. Pro mTLS Manager runs your own root CA, issues per-device client certificates as ready-to-install `.p12` bundles, maintains a Certificate Revocation List (CRL), and pushes the CA and CRL to your Caddy server over SSH, so revoking a lost phone takes one click.
 
+> 🙌 **Revocation powered by [caddy-revocation-validator](https://github.com/Gr33nbl00d/caddy-revocation-validator) by [@Gr33nbl00d](https://github.com/Gr33nbl00d).** Caddy can't check CRLs on its own, and this plugin is what makes one-click revocation work. Huge thanks for a great, well-built project. Go give it a ⭐!
+
 ## Features
 
 - **Private root CA**: create an RSA 2048/4096 root CA with your own name, organization and validity.
@@ -225,6 +227,12 @@ npm run dev     # Express API + Vite dev server with hot reload on :3000
 ```
 
 Stack: React 19, Vite, Tailwind CSS 4, Express, node-forge, ssh2.
+
+## Credits
+
+- **[caddy-revocation-validator](https://github.com/Gr33nbl00d/caddy-revocation-validator)** by [@Gr33nbl00d](https://github.com/Gr33nbl00d): the Caddy plugin that adds CRL and OCSP revocation checking to `client_auth`. Without it, revoked certificates would still be accepted. Thank you for the excellent work!
+- [Caddy](https://caddyserver.com) and [xcaddy](https://github.com/caddyserver/xcaddy)
+- [node-forge](https://github.com/digitalbazaar/forge) and [ssh2](https://github.com/mscdex/ssh2)
 
 ## License
 
