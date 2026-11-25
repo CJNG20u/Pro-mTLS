@@ -1,7 +1,8 @@
 services:
   pro-mtls-manager:
     build: .
-    image: pro-mtls-manager:latest
+    # Prebuilt image is pulled first; `docker compose up -d --build` builds from source instead
+    image: ghcr.io/cjng20u/pro-mtls:latest
     container_name: pro-mtls-manager
     restart: unless-stopped
     ports:

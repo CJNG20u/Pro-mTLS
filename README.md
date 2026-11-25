@@ -1,5 +1,7 @@
 # Pro mTLS Manager
 
+[![Docker image](https://github.com/CJNG20u/Pro-mTLS/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/CJNG20u/Pro-mTLS/pkgs/container/pro-mtls)
+
 **A self-hosted private Certificate Authority and mTLS client-certificate dashboard for [Caddy](https://caddyserver.com).**
 
 Lock your self-hosted services so that only devices holding a certificate you issued can connect. Pro mTLS Manager runs your own root CA, issues per-device client certificates as ready-to-install `.p12` bundles, maintains a Certificate Revocation List (CRL), and pushes the CA and CRL to your Caddy server over SSH, so revoking a lost phone takes one click.
@@ -45,6 +47,33 @@ docker compose up -d --build
 ```
 
 Open `http://<server-ip>:3000`.
+
+#### Prefer not to build? Use the prebuilt image
+
+A ready-made image is published to GitHub Container Registry on every push to `main`. Save this as `docker-compose.yml` in an empty folder:
+
+```yaml
+services:
+  pro-mtls-manager:
+    image: ghcr.io/cjng20u/pro-mtls:latest
+    container_name: pro-mtls-manager
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - DATA_DIR=/app/pki_storage
+    volumes:
+      - ./pki_storage:/app/pki_storage
+```
+
+```bash
+docker compose pull && docker compose up -d
+```
+
+Images are built automatically for `linux/amd64` and `linux/arm64`. `:latest` follows `main`; each release also gets version tags (e.g. `:2.0.0`, `:2`) so you can pin a version. The repo's own `docker-compose.yml` also pulls this image first and only builds from source when you pass `--build`.
 
 To update later:
 
