@@ -129,7 +129,7 @@ openssl pkcs12 -in client.p12 -nocerts -nodes -out client.key`;
                   <strong className="text-white">Select File & Enter Password:</strong> Pick the downloaded <code className="font-mono text-emerald-400">.p12</code> file and input the bundle password when prompted.
                 </li>
                 <li>
-                  <strong className="text-white">Name Certificate:</strong> Give it a friendly name (e.g. <em>Ulises-Pixel9Pro</em>) and tap OK.
+                  <strong className="text-white">Name Certificate:</strong> Give it a friendly name (e.g. <em>Alex-Pixel9Pro</em>) and tap OK.
                 </li>
               </ol>
             </div>

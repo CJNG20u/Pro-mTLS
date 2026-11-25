@@ -17,7 +17,11 @@ export const IssueCertModal: React.FC<IssueCertModalProps> = ({
   onOpenInstallGuide,
 }) => {
   const [personalizedName, setPersonalizedName] = useState('');
-  const [allowedHostsInput, setAllowedHostsInput] = useState('');
+  const HOSTS_KEY = 'pro-mtls:last-allowed-hosts';
+  const readLastHosts = () => {
+    try { return localStorage.getItem(HOSTS_KEY) || ''; } catch { return ''; }
+  };
+  const [allowedHostsInput, setAllowedHostsInput] = useState(readLastHosts);
   const [validityDays, setValidityDays] = useState<number>(365);
   const [customDays, setCustomDays] = useState<string>('');
   const [p12Password, setP12Password] = useState('');
@@ -64,7 +68,7 @@ export const IssueCertModal: React.FC<IssueCertModalProps> = ({
     setError(null);
 
     if (!personalizedName.trim()) {
-      setError('A personalized name/identifier is required (e.g. Ulises-Pixel9Pro).');
+      setError('A personalized name/identifier is required (e.g. Alex-Pixel9Pro).');
       return;
     }
 
@@ -78,7 +82,12 @@ export const IssueCertModal: React.FC<IssueCertModalProps> = ({
       .split(',')
       .map((h) => h.trim())
       .filter(Boolean);
-    const allowedHosts = parsedHosts.length > 0 ? parsedHosts : ['*.xlabserver.com'];
+    if (parsedHosts.length === 0) {
+      setError('Enter at least one allowed hostname (e.g. *.example.com or app.example.com).');
+      return;
+    }
+    const allowedHosts = parsedHosts;
+    try { localStorage.setItem(HOSTS_KEY, parsedHosts.join(', ')); } catch { /* ignore */ }
     const effectivePassword = passwordless ? '' : p12Password;
 
     setLoading(true);
@@ -103,7 +112,7 @@ export const IssueCertModal: React.FC<IssueCertModalProps> = ({
 
   const handleResetAndClose = () => {
     setPersonalizedName('');
-    setAllowedHostsInput('');
+    setAllowedHostsInput(readLastHosts());
     setP12Password('');
     setPasswordless(false);
     setShowPassword(false);
@@ -163,7 +172,7 @@ export const IssueCertModal: React.FC<IssueCertModalProps> = ({
                   <label className="text-xs font-medium text-slate-300 flex items-center gap-1.5">
                     <Globe className="w-3.5 h-3.5 text-cyan-400" />
                     <span>Allowed Hostnames</span>
-                    <span className="text-[11px] text-slate-500 font-normal">(Optional)</span>
+                    <span className="text-rose-400">*</span>
                   </label>
                   <span className="text-[11px] text-slate-500 font-mono">OU=host:&lt;hostname&gt;</span>
                 </div>
@@ -171,11 +180,11 @@ export const IssueCertModal: React.FC<IssueCertModalProps> = ({
                   type="text"
                   value={allowedHostsInput}
                   onChange={(e) => setAllowedHostsInput(e.target.value)}
-                  placeholder="e.g., musik.xlabserver.com, photos.xlabserver.com (defaults to *.xlabserver.com)"
+                  placeholder="e.g., *.example.com or photos.example.com, music.example.com"
                   className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 font-mono"
                 />
                 <p className="text-[11px] text-slate-500 mt-1">
-                  Comma-separated hostnames this certificate may access. Leave blank to default to <code className="text-slate-300 font-mono">*.xlabserver.com</code>.
+                  Comma-separated hostnames this certificate may access. Use <code className="text-slate-300 font-mono">*.example.com</code> to allow every subdomain. Your last entry is remembered.
                 </p>
               </div>
 
@@ -326,7 +335,7 @@ export const IssueCertModal: React.FC<IssueCertModalProps> = ({
                   type="text"
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  placeholder="e.g. Primary smartphone for Ulises with WireGuard & homelab access"
+                  placeholder="e.g. Primary smartphone for Alex with WireGuard & homelab access"
                   className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
                 />
               </div>

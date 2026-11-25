@@ -157,7 +157,7 @@ async function startServer() {
       } = req.body;
 
       if (!personalizedName || !personalizedName.trim()) {
-        return res.status(400).json({ error: 'Personalized name is required (e.g., Ulises-Pixel9Pro).' });
+        return res.status(400).json({ error: 'Personalized name is required (e.g., Alex-Pixel9Pro).' });
       }
 
       const rawPass = p12Password !== undefined ? p12Password : password;

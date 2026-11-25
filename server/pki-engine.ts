@@ -359,7 +359,10 @@ emailAddress = optional
           .filter((h) => h.length > 0)
       )
     );
-    const allowedHosts = cleanedHosts.length > 0 ? cleanedHosts : ['*.xlabserver.com'];
+    if (cleanedHosts.length === 0) {
+      throw new Error('At least one allowed hostname is required (e.g. *.example.com).');
+    }
+    const allowedHosts = cleanedHosts;
 
     const caDetails = this.getCaDetails();
     const caCertPem = fs.readFileSync(path.join(CA_DIR, 'ca.crt'), 'utf8');
