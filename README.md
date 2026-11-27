@@ -19,9 +19,7 @@ Pro mTLS Manager is your own little certificate authority. Make a certificate fo
 docker pull ghcr.io/cjng20u/pro-mtls:latest
 ```
 
-**A self-hosted private Certificate Authority and mTLS client-certificate dashboard for [Caddy](https://caddyserver.com).**
-
-Lock your self-hosted services so that only devices holding a certificate you issued can connect. Pro mTLS Manager runs your own root CA, issues per-device client certificates as ready-to-install `.p12` bundles, maintains a Certificate Revocation List (CRL), and pushes the CA and CRL to your Caddy server over SSH, so revoking a lost phone takes one click.
+Self-hosted private CA & mTLS client-certificate manager for Caddy, now with secure login and an installable iOS/Android PWA. Issue .p12 certs, revoke via CRL, sync to Caddy over SSH. Docker-ready.
 
 > 🙌 **Revocation powered by [caddy-revocation-validator](https://github.com/Gr33nbl00d/caddy-revocation-validator) by [@Gr33nbl00d](https://github.com/Gr33nbl00d).** Caddy can't check CRLs on its own, and this plugin is what makes one-click revocation work. Huge thanks for a great, well-built project. Go give it a ⭐!
 
