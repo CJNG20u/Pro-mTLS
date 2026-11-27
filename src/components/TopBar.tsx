@@ -126,7 +126,7 @@ export const TopBar: React.FC<TopBarProps> = ({
       </aside>
 
       {/* ---------- Mobile bar ---------- */}
-      <header className="md:hidden sticky top-0 z-30 border-b border-slate-800 bg-slate-950/95 backdrop-blur-md">
+      <header className="md:hidden sticky top-0 z-30 border-b border-slate-800 bg-slate-950/95 backdrop-blur-md pt-[env(safe-area-inset-top)]">
         <div className="px-4 h-14 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5 min-w-0">
             <BrandMark className="w-7 h-7 text-emerald-400 shrink-0" />

@@ -59,7 +59,7 @@ export const AuthLockScreen: React.FC<AuthLockScreenProps> = ({ mode, minPasswor
   const canSubmit = !loading && !!password && (isLegacy || !!username.trim());
 
   return (
-    <div className="min-h-screen flex flex-col justify-center items-center p-4">
+    <div className="min-h-screen flex flex-col justify-center items-center p-4 pt-[max(1rem,env(safe-area-inset-top))]">
       <div className="max-w-md w-full bg-slate-900 border border-slate-800 border-t-2 border-t-emerald-400 rounded-2xl p-8 shadow-2xl">
         <BrandMark className="w-14 h-14 text-emerald-400 mx-auto mb-5" />
 

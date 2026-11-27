@@ -402,7 +402,20 @@ async function startServer() {
   } else {
     const distPath = path.resolve(process.cwd(), 'dist');
     if (fs.existsSync(distPath)) {
-      app.use(express.static(distPath));
+      app.use(
+        express.static(distPath, {
+          setHeaders: (res, filePath) => {
+            // The service worker and manifest must never be cached, or app updates are delayed
+            if (filePath.endsWith('sw.js')) {
+              res.setHeader('Cache-Control', 'no-cache');
+              res.setHeader('Service-Worker-Allowed', '/');
+            } else if (filePath.endsWith('manifest.webmanifest')) {
+              res.setHeader('Cache-Control', 'no-cache');
+              res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8');
+            }
+          },
+        })
+      );
       app.get('*', (_req, res) => {
         res.sendFile(path.join(distPath, 'index.html'));
       });

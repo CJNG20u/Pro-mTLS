@@ -29,6 +29,7 @@ export default function App() {
   const [systemConfig, setSystemConfig] = useState<SystemConfig | null>(null);
   const [authStatus, setAuthStatus] = useState<AuthStatus>({ authEnabled: true, authenticated: false });
   const [loading, setLoading] = useState(true);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
 
   // Modals
   const [isInitCaOpen, setIsInitCaOpen] = useState(false);
@@ -48,6 +49,7 @@ export default function App() {
   const loadData = useCallback(async () => {
     try {
       const auth = await api.getAuthStatus();
+      setConnectionError(null);
       setAuthStatus(auth);
 
       if (auth.authenticated) {
@@ -62,6 +64,10 @@ export default function App() {
       }
     } catch (e: any) {
       console.error('Failed to load dashboard data', e);
+      // Distinguish "server unreachable" (phone offline, container down) from a normal sign-in prompt
+      if (e instanceof TypeError || /failed to fetch|networkerror|load failed/i.test(String(e?.message))) {
+        setConnectionError('Check that your server is running and that you are online.');
+      }
     } finally {
       setLoading(false);
     }
@@ -106,6 +112,25 @@ export default function App() {
           <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" />
           <span className="kicker text-slate-400!">Starting Pro mTLS Manager</span>
         </div>
+      </div>
+    );
+  }
+
+  if (connectionError) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-6 pt-[max(1.5rem,env(safe-area-inset-top))] text-center">
+        <BrandMark className="w-12 h-12 text-slate-500 mb-4" />
+        <h1 className="text-base font-semibold text-white">Can’t reach Pro mTLS Manager</h1>
+        <p className="text-xs text-slate-400 mt-1 max-w-xs">{connectionError}</p>
+        <button
+          onClick={() => {
+            setLoading(true);
+            void loadData();
+          }}
+          className="mt-5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg cursor-pointer"
+        >
+          Try again
+        </button>
       </div>
     );
   }

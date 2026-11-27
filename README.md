@@ -34,6 +34,7 @@ Lock your self-hosted services so that only devices holding a certificate you is
 - **Caddy sync over SSH**: upload `ca.crt` and `crl.pem` to your Caddy server and reload it, by hand or automatically on every revoke. Password or key auth, with encrypted key passphrase support.
 - **Expiry tracking**: see active, expiring-soon, expired and revoked certs at a glance.
 - **Device setup guides**: install steps for Android, iOS, Windows, macOS and Linux.
+- **Installable phone app (PWA)**: add it to your iPhone or Android home screen and open it full-screen like a native app.
 - **Built-in login**: the dashboard and every download need a sign-in. Strong password hashing, revocable sessions, and rate-limited login attempts.
 
 ## How it works
@@ -165,6 +166,15 @@ This app holds your CA private key, so it is always behind a sign-in. Sessions l
 - **Behind a reverse proxy:** set `TRUST_PROXY=1`. If sign-in says "Cross-origin request blocked", add your hostname to `ALLOWED_ORIGINS`.
 - **Forgot your password?** Stop the app, delete `pki_storage/auth.json`, and start it again. You'll be asked to create a new account. Your CA and certificates are not touched.
 - Login protects access but doesn't encrypt traffic. Serve the dashboard over HTTPS if it is reachable beyond your home network.
+
+### Use it on your phone (PWA)
+
+Pro mTLS Manager installs as an app on iPhone, iPad, Android and desktop, so you can issue or revoke a certificate from your phone in seconds. Installing needs the page to be served over **HTTPS** (or `localhost`), so open it through your normal HTTPS address, not `http://<ip>:3000`.
+
+- **iPhone / iPad:** open the page in **Safari**, tap **Share → Add to Home Screen**, leave **Open as Web App** on, and tap **Add**.
+- **Android:** open it in Chrome, then tap the menu **⋮ → Install app** (or **Add to Home screen**). The page also shows an **Install** button under **Settings → Install as an app**.
+
+The app only caches its own screens. Certificates, keys, the CA and the CRL are never stored on the phone by the app, and you still sign in as usual. If you installed an older version, remove the icon and add it again to refresh the icon and colors.
 
 ### Your data: back it up
 

@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Lock, KeyRound, HardDrive, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
+import { Lock, KeyRound, HardDrive, AlertCircle, CheckCircle2, Loader2, Smartphone, Download, Share } from 'lucide-react';
 import { api } from '../services/api.ts';
 import { AuthStatus, SystemConfig } from '../types.ts';
+import { usePWAInstall } from '../hooks/usePWAInstall.ts';
 
 interface SettingsPanelProps {
   authStatus: AuthStatus;
@@ -13,6 +14,8 @@ interface SettingsPanelProps {
 export const SettingsPanel: React.FC<SettingsPanelProps> = ({ authStatus, onSignedOutEverywhere, systemConfig }) => {
   const dataDirDisplay = (systemConfig?.dataDir || './data').replace(/\/+$/, '');
   const minLength = authStatus.minPasswordLength ?? 10;
+  const { isInstallable, isInstalled, isIOS, installing, promptInstall } = usePWAInstall();
+  const secureContext = typeof window === 'undefined' || window.isSecureContext;
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -188,6 +191,86 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ authStatus, onSign
             </form>
           </>
         )}
+      </div>
+
+      {/* Install as a phone / desktop app (PWA) */}
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-sm">
+        <div className="flex items-start gap-4">
+          <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+            <Smartphone className="w-6 h-6" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h2 className="text-lg font-semibold text-white tracking-tight flex flex-wrap items-center gap-2">
+              <span>Install as an app</span>
+              {isInstalled && (
+                <span className="text-xs font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                  INSTALLED
+                </span>
+              )}
+            </h2>
+            <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+              {isInstalled
+                ? 'Pro mTLS Manager is running full-screen as an installed app.'
+                : 'Open your certificate authority from your home screen, full-screen and without browser bars. Works on iPhone, iPad, Android and desktop.'}
+            </p>
+
+            {!isInstalled && !secureContext && (
+              <div className="mt-3 p-3 rounded-lg border border-amber-500/20 bg-amber-500/10 text-xs text-amber-300 flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>
+                  You opened this page over plain HTTP. Installing needs HTTPS (or localhost), so open it through your HTTPS
+                  address first.
+                </span>
+              </div>
+            )}
+
+            {!isInstalled && (
+              <div className="mt-4">
+                {isInstallable ? (
+                  <button
+                    type="button"
+                    disabled={installing}
+                    onClick={() => void promptInstall()}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-500 text-white text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer disabled:cursor-not-allowed"
+                  >
+                    {installing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                    Install Pro mTLS Manager
+                  </button>
+                ) : isIOS ? (
+                  <ol className="space-y-2 text-xs text-slate-300">
+                    <li className="flex items-start gap-2">
+                      <span className="font-mono text-emerald-400">1</span>
+                      <span>
+                        Open this page in <strong className="text-white font-medium">Safari</strong>.
+                      </span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="font-mono text-emerald-400">2</span>
+                      <span className="flex items-center gap-1.5 flex-wrap">
+                        Tap <Share className="w-3.5 h-3.5 text-emerald-400 inline" />
+                        <strong className="text-white font-medium">Share</strong>, then{' '}
+                        <strong className="text-white font-medium">Add to Home Screen</strong>.
+                      </span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="font-mono text-emerald-400">3</span>
+                      <span>
+                        Leave <strong className="text-white font-medium">Open as Web App</strong> switched on, then tap Add.
+                      </span>
+                    </li>
+                  </ol>
+                ) : (
+                  <p className="text-xs text-slate-300">
+                    On Android, open the browser menu <span className="font-mono text-slate-200">⋮</span> and tap{' '}
+                    <strong className="text-white font-medium">Install app</strong> (or{' '}
+                    <strong className="text-white font-medium">Add to Home screen</strong>). On desktop Chrome or Edge, use the
+                    install icon in the address bar.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Persistent Storage Information */}
