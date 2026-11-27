@@ -11,12 +11,12 @@
 Pro mTLS Manager is your own little certificate authority. Make a certificate for each phone or laptop, install it from a .p12 file, and Caddy lets in only those devices. Lost a phone? Revoke it with one click.
 
 
-[![Docker image](https://github.com/CJNG20u/Pro-mTLS/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/CJNG20u/Pro-mTLS/pkgs/container/pro-mtls)
+[![Docker image](https://github.com/CJNG20u/xlab-mtls/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/CJNG20u/xlab-mtls/pkgs/container/xlab-mtls)
 
-🐳 **Docker image:** `ghcr.io/cjng20u/pro-mtls:latest` (amd64 + arm64)
+🐳 **Docker image:** `ghcr.io/cjng20u/xlab-mtls:latest` (amd64 + arm64)
 
 ```bash
-docker pull ghcr.io/cjng20u/pro-mtls:latest
+docker pull ghcr.io/cjng20u/xlab-mtls:latest
 ```
 
 Self-hosted private CA & mTLS client-certificate manager for Caddy, now with secure login and an installable iOS/Android PWA. Issue .p12 certs, revoke via CRL, sync to Caddy over SSH. Docker-ready.
@@ -57,8 +57,8 @@ Self-hosted private CA & mTLS client-certificate manager for Caddy, now with sec
 Requirements: Docker with the Compose plugin. Any Linux host works, including a Proxmox LXC with Docker installed.
 
 ```bash
-git clone https://github.com/CJNG20u/Pro-mTLS.git
-cd Pro-mTLS
+git clone https://github.com/CJNG20u/xlab-mtls.git
+cd xlab-mtls
 docker compose up -d --build
 ```
 
@@ -71,7 +71,7 @@ A ready-made image is published to GitHub Container Registry on every push to `m
 ```yaml
 services:
   pro-mtls-manager:
-    image: ghcr.io/cjng20u/pro-mtls:latest
+    image: ghcr.io/cjng20u/xlab-mtls:latest
     container_name: pro-mtls-manager
     restart: unless-stopped
     ports:
@@ -94,7 +94,7 @@ Images are built automatically for `linux/amd64` and `linux/arm64`. `:latest` fo
 To update later:
 
 ```bash
-cd Pro-mTLS
+cd xlab-mtls
 git pull
 docker compose up -d --build
 ```
@@ -104,7 +104,7 @@ docker compose up -d --build
 Requirements: Debian/Ubuntu, Node.js 20+ (22 LTS recommended) and the `openssl` command-line tool.
 
 ```bash
-sudo git clone https://github.com/CJNG20u/Pro-mTLS.git /opt/pro-mtls-manager
+sudo git clone https://github.com/CJNG20u/xlab-mtls.git /opt/pro-mtls-manager
 cd /opt/pro-mtls-manager
 sudo cp .env.example .env && sudo chmod 600 .env   # optional, edit as needed
 sudo ./install.sh                                   # checks prereqs, installs deps, builds the UI
@@ -180,7 +180,7 @@ Everything the app creates (the CA **private key**, issued certificates, the CRL
 
 > ⚠️ Anyone with `pki_storage/ca` can issue certificates your Caddy server will trust. Keep it private, back it up off the host, and **never commit it to Git**. `.gitignore` already excludes it.
 
-**Moving an existing install:** stop the app and copy the old `pki_storage` folder into the new `Pro-mTLS/` folder. Your CA and all your certificates carry over unchanged.
+**Moving an existing install:** stop the app and copy the old `pki_storage` folder into the new `xlab-mtls/` folder. Your CA and all your certificates carry over unchanged.
 
 ---
 

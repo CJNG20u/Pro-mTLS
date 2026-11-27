@@ -12,7 +12,7 @@
 
 [Unit]
 Description=Pro mTLS Manager (Private CA & OpenSSL CRL Dashboard for Caddy)
-Documentation=https://github.com/CJNG20u/Pro-mTLS
+Documentation=https://github.com/CJNG20u/xlab-mtls
 After=network-online.target
 Wants=network-online.target
 
