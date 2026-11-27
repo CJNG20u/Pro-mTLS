@@ -1,4 +1,15 @@
-# Pro mTLS Manager
+<h1 align="center">Pro mTLS Manager</h1>
+
+<p align="center">
+  <img src="docs/logo.svg" width="128" alt="Pro mTLS Manager logo">
+</p>
+
+<p align="center"><b>Only your own devices get in.</b></p>
+
+<p align="center"><a href="#1-install-pro-mtls-manager">Install</a> · <a href="#features">Features</a> · <a href="#how-it-works">How it works</a> · <a href="#3-set-up-caddy">Caddy setup</a></p>
+
+Pro mTLS Manager is your own little certificate authority. Make a certificate for each phone or laptop, install it from a .p12 file, and Caddy lets in only those devices. Lost a phone? Revoke it with one click.
+
 
 [![Docker image](https://github.com/CJNG20u/Pro-mTLS/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/CJNG20u/Pro-mTLS/pkgs/container/pro-mtls)
 
