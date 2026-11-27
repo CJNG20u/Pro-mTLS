@@ -6,11 +6,12 @@ import { appConfig, getPublicSystemConfig, validateStartupEnvironment } from './
 import { pkiEngine } from './server/pki-engine.ts';
 import { caddySshService } from './server/caddy-ssh.ts';
 import {
-  authMiddleware,
-  generateSessionToken,
-  hashPassword,
-  isValidSessionToken,
-  revokeSessionToken,
+  authGate,
+  isAuthDisabled,
+  originGuard,
+  registerAuthRoutes,
+  securityHeaders,
+  seedAccountFromEnv,
 } from './server/auth.ts';
 
 async function startServer() {
@@ -24,78 +25,26 @@ async function startServer() {
   const PORT = appConfig.port;
   const HOST = appConfig.host;
 
+  // Client IP for login rate limiting. Behind a reverse proxy set TRUST_PROXY=1 (number of proxy hops).
+  const trustProxy = process.env.TRUST_PROXY;
+  if (trustProxy) {
+    app.set('trust proxy', /^\d+$/.test(trustProxy) ? Number(trustProxy) : trustProxy === 'true' ? true : trustProxy);
+  }
+  app.disable('x-powered-by');
+
+  // ---------------- AUTHENTICATION (setup / login screen, session cookies) ----------------
+  await seedAccountFromEnv();
+  if (isAuthDisabled()) {
+    console.warn('[auth] AUTH_DISABLED=true: the dashboard is running WITHOUT a login. Only use this behind another access layer.');
+  }
+  app.use(securityHeaders);
+  app.use(originGuard);
+  app.use(authGate); // protects every /api route (login page assets stay public)
+
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 
-  // Apply Auth Middleware
-  app.use(authMiddleware);
-
-  // ---------------- AUTH ROUTES ----------------
-  app.get('/api/auth/status', (req, res) => {
-    const settings = pkiEngine.getAuthSettings();
-    const token = (req.headers['x-mtls-auth-token'] || req.headers['authorization']?.replace('Bearer ', '')) as string;
-    const authenticated = !settings.enabled || isValidSessionToken(token);
-
-    res.json({
-      authEnabled: settings.enabled,
-      authenticated,
-    });
-  });
-
-  app.post('/api/auth/login', (req, res) => {
-    const { password } = req.body;
-    const settings = pkiEngine.getAuthSettings();
-
-    if (!settings.enabled) {
-      const token = generateSessionToken();
-      return res.json({ success: true, token });
-    }
-
-    if (!password || hashPassword(password) !== settings.passwordHash) {
-      return res.status(401).json({ success: false, error: 'Invalid dashboard password.' });
-    }
-
-    const token = generateSessionToken();
-    return res.json({ success: true, token });
-  });
-
-  app.post('/api/auth/logout', (req, res) => {
-    const token = (req.headers['x-mtls-auth-token'] || req.headers['authorization']?.replace('Bearer ', '')) as string;
-    if (token) {
-      revokeSessionToken(token);
-    }
-    res.json({ success: true });
-  });
-
-  app.post('/api/auth/setup', (req, res) => {
-    const { enabled, password, currentPassword } = req.body;
-    const settings = pkiEngine.getAuthSettings();
-
-    // If currently enabled, require current password
-    if (settings.enabled && settings.passwordHash) {
-      if (!currentPassword || hashPassword(currentPassword) !== settings.passwordHash) {
-        return res.status(403).json({ success: false, error: 'Current password is incorrect.' });
-      }
-    }
-
-    if (enabled) {
-      if (!password || password.length < 6) {
-        return res.status(400).json({ success: false, error: 'Password must be at least 6 characters long.' });
-      }
-      pkiEngine.saveAuthSettings({
-        enabled: true,
-        passwordHash: hashPassword(password),
-      });
-      const token = generateSessionToken();
-      return res.json({ success: true, token, message: 'Password protection enabled.' });
-    } else {
-      pkiEngine.saveAuthSettings({
-        enabled: false,
-        passwordHash: undefined,
-      });
-      return res.json({ success: true, message: 'Password protection disabled.' });
-    }
-  });
+  registerAuthRoutes(app);
 
   // ---------------- SYSTEM CONFIG ROUTE ----------------
   app.get('/api/system/config', (_req, res) => {

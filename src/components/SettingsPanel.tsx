@@ -1,70 +1,75 @@
-import React, { useState, useEffect } from 'react';
-import { Lock, Unlock, Key, HardDrive, Check, Copy, AlertCircle, Shield, CheckCircle2 } from 'lucide-react';
-import { api, getStoredToken } from '../services/api.ts';
+import React, { useState } from 'react';
+import { Lock, KeyRound, HardDrive, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
+import { api } from '../services/api.ts';
 import { AuthStatus, SystemConfig } from '../types.ts';
 
 interface SettingsPanelProps {
   authStatus: AuthStatus;
-  onAuthUpdated: () => void;
+  /** Called after the server ended every session (including this one). */
+  onSignedOutEverywhere: () => void;
   systemConfig?: SystemConfig | null;
 }
 
-export const SettingsPanel: React.FC<SettingsPanelProps> = ({ authStatus, onAuthUpdated, systemConfig }) => {
+export const SettingsPanel: React.FC<SettingsPanelProps> = ({ authStatus, onSignedOutEverywhere, systemConfig }) => {
   const dataDirDisplay = (systemConfig?.dataDir || './data').replace(/\/+$/, '');
-  const [enabled, setEnabled] = useState(authStatus.authEnabled);
+  const minLength = authStatus.minPasswordLength ?? 10;
+  const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [currentPassword, setCurrentPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [copiedToken, setCopiedToken] = useState(false);
 
-  const activeToken = getStoredToken();
-
-  useEffect(() => {
-    setEnabled(authStatus.authEnabled);
-  }, [authStatus]);
-
-  const handleSaveSecurity = async (e: React.FormEvent) => {
+  const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
     setMessage(null);
 
-    if (enabled) {
-      if (newPassword && newPassword !== confirmPassword) {
-        setMessage({ type: 'error', text: 'New passwords do not match.' });
-        return;
-      }
-      if (!authStatus.authEnabled && (!newPassword || newPassword.length < 6)) {
-        setMessage({ type: 'error', text: 'Password must be at least 6 characters long.' });
-        return;
-      }
+    if (newPassword.length < minLength) {
+      setMessage({ type: 'error', text: `New password must be at least ${minLength} characters.` });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setMessage({ type: 'error', text: 'New passwords do not match.' });
+      return;
     }
 
     setLoading(true);
     try {
-      const res = await api.setupAuth(enabled, newPassword || undefined, currentPassword || undefined);
-      setMessage({ type: 'success', text: res.message });
+      const res = await api.changePassword(currentPassword, newPassword);
+      setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
-      setCurrentPassword('');
-      onAuthUpdated();
+      setMessage({
+        type: 'success',
+        text:
+          res.otherSessionsSignedOut > 0
+            ? `Password updated. ${res.otherSessionsSignedOut} other signed-in ${
+                res.otherSessionsSignedOut === 1 ? 'device was' : 'devices were'
+              } signed out.`
+            : 'Password updated.',
+      });
     } catch (err: any) {
-      setMessage({ type: 'error', text: err.message || 'Failed to update security settings.' });
+      setMessage({ type: 'error', text: err.message || 'Could not change the password.' });
     } finally {
       setLoading(false);
     }
   };
 
-  const copyToken = async () => {
-    if (!activeToken) return;
+  const handleSignOutEverywhere = async () => {
+    if (loading) return;
+    if (!window.confirm('Sign out of every device, including this one?')) return;
+    setLoading(true);
     try {
-      await navigator.clipboard.writeText(activeToken);
-      setCopiedToken(true);
-      setTimeout(() => setCopiedToken(false), 2000);
-    } catch (e) {
-      console.error(e);
+      await api.logoutAll();
+      onSignedOutEverywhere();
+    } catch (err: any) {
+      setMessage({ type: 'error', text: err.message || 'Could not sign out.' });
+      setLoading(false);
     }
   };
+
+  const inputClass =
+    'w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500';
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -76,25 +81,36 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ authStatus, onAuth
           </div>
           <div>
             <h2 className="text-lg font-semibold text-white tracking-tight flex items-center gap-2">
-              <span>Dashboard Security & Access Control</span>
+              <span>Dashboard Security</span>
               {authStatus.authEnabled ? (
                 <span className="text-xs font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
                   PROTECTED
                 </span>
               ) : (
                 <span className="text-xs font-mono text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
-                  OPEN ACCESS
+                  LOGIN OFF
                 </span>
               )}
             </h2>
             <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-              Protect your mTLS certificate authority from unauthorized internet traffic by enabling dashboard passcode authentication and API token verification.
+              {authStatus.authEnabled ? (
+                <>
+                  Signed in as <span className="font-medium text-slate-200">{authStatus.username}</span>. Your CA private key and
+                  every certificate are only reachable after signing in.
+                </>
+              ) : (
+                <>
+                  The login is turned off (<code className="font-mono text-amber-300">AUTH_DISABLED=true</code>). Anyone who can
+                  reach this page can issue certificates and download keys. Remove that setting to require a sign-in.
+                </>
+              )}
             </p>
           </div>
         </div>
 
         {message && (
           <div
+            role="status"
             className={`p-3 rounded-lg border text-xs mb-4 flex items-center gap-2 ${
               message.type === 'success'
                 ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300'
@@ -110,103 +126,67 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ authStatus, onAuth
           </div>
         )}
 
-        <form onSubmit={handleSaveSecurity} className="space-y-4">
-          <div className="flex items-center justify-between p-4 bg-slate-950 rounded-lg border border-slate-800">
-            <div>
-              <span className="text-xs font-medium text-white block">Require Dashboard Password</span>
-              <span className="text-[11px] text-slate-400">
-                When enabled, accessing this dashboard or making API calls requires passcode authentication.
-              </span>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                checked={enabled}
-                onChange={(e) => setEnabled(e.target.checked)}
-                className="sr-only peer"
-              />
-              <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
-            </label>
-          </div>
-
-          {enabled && (
-            <div className="space-y-3 pt-2">
-              {authStatus.authEnabled && (
-                <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">
-                    Current Password <span className="text-rose-400">*</span>
-                  </label>
-                  <input
-                    type="password"
-                    value={currentPassword}
-                    onChange={(e) => setCurrentPassword(e.target.value)}
-                    placeholder="Enter current password to make changes"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">
-                    {authStatus.authEnabled ? 'New Password (Optional)' : 'Set Dashboard Password'}
-                  </label>
-                  <input
-                    type="password"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="Minimum 6 characters"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">
-                    Confirm Password
-                  </label>
-                  <input
-                    type="password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="Confirm new password"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
+        {authStatus.authEnabled && (
+          <>
+            <form onSubmit={handleChangePassword} className="space-y-3" noValidate>
+              <h3 className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                <KeyRound className="w-3.5 h-3.5" />
+                Change password
+              </h3>
+              {/* Hidden username helps password managers attach the new password to the right account */}
+              <input type="text" name="username" autoComplete="username" value={authStatus.username ?? ''} readOnly hidden />
+              <div className="grid gap-3 sm:grid-cols-3">
+                <input
+                  type="password"
+                  placeholder="Current password"
+                  aria-label="Current password"
+                  autoComplete="current-password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  className={inputClass}
+                />
+                <input
+                  type="password"
+                  placeholder="New password"
+                  aria-label="New password"
+                  autoComplete="new-password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className={inputClass}
+                />
+                <input
+                  type="password"
+                  placeholder="Confirm new password"
+                  aria-label="Confirm new password"
+                  autoComplete="new-password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className={inputClass}
+                />
               </div>
-            </div>
-          )}
-
-          <div className="flex justify-end pt-3">
-            <button
-              type="submit"
-              disabled={loading}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium rounded-lg transition-colors"
-            >
-              {loading ? 'Saving...' : 'Update Security Settings'}
-            </button>
-          </div>
-        </form>
-
-        {/* API Token display */}
-        {activeToken && (
-          <div className="mt-6 pt-5 border-t border-slate-800">
-            <span className="text-xs font-medium text-slate-300 block mb-1">Active Session / API Token</span>
-            <p className="text-[11px] text-slate-400 mb-2">
-              Use this bearer token in <code className="font-mono text-emerald-400">x-mtls-auth-token</code> header for programmatic curl scripts or automated CI/CD pipeline issuance.
-            </p>
-            <div className="flex items-center justify-between bg-slate-950 px-3 py-2 rounded-lg border border-slate-800">
-              <span className="font-mono text-slate-300 text-xs truncate max-w-lg select-all">
-                {activeToken}
-              </span>
-              <button
-                onClick={copyToken}
-                className="text-xs text-slate-400 hover:text-white flex items-center gap-1 shrink-0 ml-2"
-              >
-                {copiedToken ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>{copiedToken ? 'Copied' : 'Copy'}</span>
-              </button>
-            </div>
-          </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="submit"
+                  disabled={loading || !currentPassword || !newPassword || !confirmPassword}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-500 text-white text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer disabled:cursor-not-allowed"
+                >
+                  {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  Update password
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleSignOutEverywhere()}
+                  disabled={loading}
+                  className="px-4 py-2 bg-slate-950 hover:bg-slate-800 disabled:opacity-50 border border-slate-800 text-slate-300 text-xs font-semibold rounded-lg transition-all cursor-pointer"
+                >
+                  Sign out everywhere
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-500">
+                Changing your password signs out every other device. At least {minLength} characters.
+              </p>
+            </form>
+          </>
         )}
       </div>
 

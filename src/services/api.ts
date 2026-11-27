@@ -1,27 +1,8 @@
 import { CaDetails, StoredClientCert, CrlDetails, CaddyConfig, SyncResult, AuthStatus, SystemConfig } from '../types.ts';
 
-const TOKEN_KEY = 'mtls_dashboard_auth_token';
-
-export function getStoredToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY);
-}
-
-export function setStoredToken(token: string | null): void {
-  if (token) {
-    localStorage.setItem(TOKEN_KEY, token);
-  } else {
-    localStorage.removeItem(TOKEN_KEY);
-  }
-}
-
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const token = getStoredToken();
+  // The session lives in an HttpOnly cookie that the browser sends automatically.
   const headers = new Headers(options.headers || {});
-
-  if (token) {
-    headers.set('x-mtls-auth-token', token);
-    headers.set('Authorization', `Bearer ${token}`);
-  }
 
   if (options.body && typeof options.body === 'string' && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
@@ -32,10 +13,14 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     headers,
   });
 
-  if (res.status === 401 && !endpoint.includes('/api/auth/')) {
-    // Session expired or unauthorized
-    window.dispatchEvent(new CustomEvent('auth-unauthorized'));
-    throw new Error('Unauthorized access. Please log in.');
+  if (res.status === 401) {
+    // Only an expired/revoked session returns AUTH_REQUIRED. Wrong-password answers (login, change password)
+    // are ordinary errors shown in their own form.
+    const body = await res.clone().json().catch(() => null);
+    if (body?.code === 'AUTH_REQUIRED') {
+      window.dispatchEvent(new CustomEvent('auth-unauthorized'));
+      throw new Error('Your session has expired. Please sign in again.');
+    }
   }
 
   if (!res.ok) {
@@ -61,34 +46,36 @@ export const api = {
     return request<AuthStatus>('/api/auth/status');
   },
 
-  async login(password: string): Promise<{ success: boolean; token: string }> {
-    const res = await request<{ success: boolean; token: string }>('/api/auth/login', {
+  async login(username: string, password: string): Promise<AuthStatus> {
+    return request<AuthStatus>('/api/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ password }),
+      body: JSON.stringify({ username, password }),
     });
-    if (res.token) {
-      setStoredToken(res.token);
-    }
-    return res;
+  },
+
+  async setupAccount(username: string, password: string): Promise<AuthStatus> {
+    return request<AuthStatus>('/api/auth/setup', {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+    });
   },
 
   async logout(): Promise<void> {
-    try {
-      await request('/api/auth/logout', { method: 'POST' });
-    } finally {
-      setStoredToken(null);
-    }
+    await request('/api/auth/logout', { method: 'POST' });
   },
 
-  async setupAuth(enabled: boolean, password?: string, currentPassword?: string): Promise<{ success: boolean; token?: string; message: string }> {
-    const res = await request<{ success: boolean; token?: string; message: string }>('/api/auth/setup', {
+  async logoutAll(): Promise<{ ok: boolean; revoked: number }> {
+    return request<{ ok: boolean; revoked: number }>('/api/auth/logout-all', { method: 'POST' });
+  },
+
+  async changePassword(
+    currentPassword: string,
+    newPassword: string
+  ): Promise<{ ok: boolean; otherSessionsSignedOut: number }> {
+    return request<{ ok: boolean; otherSessionsSignedOut: number }>('/api/auth/change-password', {
       method: 'POST',
-      body: JSON.stringify({ enabled, password, currentPassword }),
+      body: JSON.stringify({ currentPassword, newPassword }),
     });
-    if (res.token) {
-      setStoredToken(res.token);
-    }
-    return res;
   },
 
   // System Config
@@ -117,8 +104,7 @@ export const api = {
   },
 
   getCaDownloadUrl(): string {
-    const token = getStoredToken();
-    return token ? `/api/ca/download?token=${encodeURIComponent(token)}` : '/api/ca/download';
+    return '/api/ca/download';
   },
 
   // Certificates
@@ -157,8 +143,7 @@ export const api = {
   },
 
   getCertDownloadUrl(id: string, type: 'p12' | 'crt' | 'key'): string {
-    const token = getStoredToken();
-    return token ? `/api/certs/${id}/download/${type}?token=${encodeURIComponent(token)}` : `/api/certs/${id}/download/${type}`;
+    return `/api/certs/${id}/download/${type}`;
   },
 
   // CRL
@@ -167,8 +152,7 @@ export const api = {
   },
 
   getCrlDownloadUrl(): string {
-    const token = getStoredToken();
-    return token ? `/api/crl/download?token=${encodeURIComponent(token)}` : '/api/crl/download';
+    return '/api/crl/download';
   },
 
   // Caddy

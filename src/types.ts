@@ -76,6 +76,12 @@ export interface SyncResult {
 export interface AuthStatus {
   authEnabled: boolean;
   authenticated: boolean;
+  /** No account exists yet: show the "create admin account" screen. */
+  setupRequired?: boolean;
+  /** An old password-only login still exists; the first sign-in upgrades it to an "admin" account. */
+  legacyPassword?: boolean;
+  username?: string | null;
+  minPasswordLength?: number;
 }
 
 export interface SystemConfig {

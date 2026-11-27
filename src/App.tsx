@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Loader2, Plus, Shield, KeyRound, Server, FileText, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { CaDetails, StoredClientCert, AuthStatus, SystemConfig } from './types.ts';
-import { api, setStoredToken } from './services/api.ts';
+import { api } from './services/api.ts';
 import { TopBar } from './components/TopBar.tsx';
 import { CaStatusCard } from './components/CaStatusCard.tsx';
 import { CaInitModal } from './components/CaInitModal.tsx';
@@ -27,7 +27,7 @@ export default function App() {
   const [ca, setCa] = useState<CaDetails | null>(null);
   const [certs, setCerts] = useState<StoredClientCert[]>([]);
   const [systemConfig, setSystemConfig] = useState<SystemConfig | null>(null);
-  const [authStatus, setAuthStatus] = useState<AuthStatus>({ authEnabled: false, authenticated: true });
+  const [authStatus, setAuthStatus] = useState<AuthStatus>({ authEnabled: true, authenticated: false });
   const [loading, setLoading] = useState(true);
 
   // Modals
@@ -50,7 +50,7 @@ export default function App() {
       const auth = await api.getAuthStatus();
       setAuthStatus(auth);
 
-      if (!auth.authEnabled || auth.authenticated) {
+      if (auth.authenticated) {
         const [caData, certsData, sysCfg] = await Promise.all([
           api.getCaDetails(),
           api.getCertificates(),
@@ -78,8 +78,11 @@ export default function App() {
   }, [loadData]);
 
   const handleLogout = async () => {
-    await api.logout();
-    setStoredToken(null);
+    try {
+      await api.logout();
+    } catch {
+      // the cookie may already be invalid; lock the screen regardless
+    }
     setAuthStatus((prev) => ({ ...prev, authenticated: false }));
     showToast('Logged out of dashboard', 'info');
   };
@@ -107,12 +110,18 @@ export default function App() {
     );
   }
 
-  // If dashboard password is required and user is not authenticated yet
-  if (authStatus.authEnabled && !authStatus.authenticated) {
-    return <AuthLockScreen onAuthenticated={() => {
-      setAuthStatus((prev) => ({ ...prev, authenticated: true }));
-      loadData();
-    }} />;
+  // First run (no account yet) or not signed in
+  if (authStatus.authEnabled && (authStatus.setupRequired || !authStatus.authenticated)) {
+    return (
+      <AuthLockScreen
+        mode={authStatus.setupRequired ? 'setup' : authStatus.legacyPassword ? 'legacy' : 'login'}
+        minPasswordLength={authStatus.minPasswordLength ?? 10}
+        onAuthenticated={() => {
+          setLoading(true);
+          void loadData();
+        }}
+      />
+    );
   }
 
   const caActive = ca?.status === 'active';
@@ -235,7 +244,7 @@ export default function App() {
         {activeTab === 'settings' && (
           <SettingsPanel
             authStatus={authStatus}
-            onAuthUpdated={loadData}
+            onSignedOutEverywhere={() => setAuthStatus((prev) => ({ ...prev, authenticated: false }))}
             systemConfig={systemConfig}
           />
         )}

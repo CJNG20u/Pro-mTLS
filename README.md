@@ -34,7 +34,7 @@ Lock your self-hosted services so that only devices holding a certificate you is
 - **Caddy sync over SSH**: upload `ca.crt` and `crl.pem` to your Caddy server and reload it, by hand or automatically on every revoke. Password or key auth, with encrypted key passphrase support.
 - **Expiry tracking**: see active, expiring-soon, expired and revoked certs at a glance.
 - **Device setup guides**: install steps for Android, iOS, Windows, macOS and Linux.
-- **Optional dashboard password**.
+- **Built-in login**: the dashboard and every download need a sign-in. Strong password hashing, revocable sessions, and rate-limited login attempts.
 
 ## How it works
 
@@ -141,12 +141,30 @@ Everything works out of the box. To change defaults, copy `.env.example` to `.en
 | `CADDY_REMOTE_CERTS_DIR` | `/etc/caddy/certs` | Default certs folder in the Server Sync panel |
 | `CADDY_RELOAD_CMD` | `sudo systemctl reload caddy` | Command used to reload Caddy (remote SSH default and local reload) |
 | `SSH_KEY_PATH` | *(none)* | SSH key used when none is entered in the UI. Otherwise `~/.ssh/id_ed25519`, then `~/.ssh/id_rsa` |
-| `AUTH_SALT` | `mtls_salt` | Salt for the dashboard password hash. Set it **before** enabling the password; changing it later means setting the password again |
+| `ADMIN_USER` / `ADMIN_PASSWORD` | *(none)* | Create the admin account on first start instead of using the first-run screen. Ignored once an account exists |
+| `TRUST_PROXY` | *(off)* | Set to `1` when the app sits behind one reverse proxy (Caddy, nginx, Cloudflare Tunnel) so login rate limiting sees each visitor's real IP |
+| `ALLOWED_ORIGINS` | *(none)* | Only if your proxy rewrites the `Host` header and sign-in is blocked as cross-origin. Comma-separated hostnames |
+| `AUTH_DISABLED` | `false` | `true` turns the login **off**. Only use it behind another access layer such as mTLS or a VPN |
+| `AUTH_SALT` | `mtls_salt` | Only used to read an old dashboard password from an earlier version so it can be upgraded. New installs don't need it |
 | `STRICT_ENV_VALIDATION` | `false` | Refuse to start unless the core variables are set explicitly |
 
 #### Caddy on the same machine
 
 If Caddy runs on the same host as Pro mTLS Manager (bare metal), you don't need SSH at all. Set `CRL_OUTPUT_PATH=/etc/caddy/certs/crl.pem` and `CA_CERT_OUTPUT_PATH=/etc/caddy/certs/ca.crt`. The Server Sync page then shows a **Publish & Reload Local Caddy** button, and with `CADDY_AUTO_RELOAD_LOCAL=true` Caddy is reloaded automatically after every revocation.
+
+### Login & security
+
+This app holds your CA private key, so it is always behind a sign-in. Sessions last 30 days per device. Under **Settings → Dashboard Security** you can change your password or sign out of every device.
+
+- **Upgrading from an older version?** If you had a dashboard password, just sign in with it once. It is upgraded to a stronger hash and becomes the account `admin`. If you never set a password, you will be asked to create an account on first visit.
+- **Scripts and curl:** the old copyable API token is gone, and tokens are no longer accepted in URLs. Sign in with a cookie jar instead:
+  ```bash
+  curl -c jar.txt -H 'Content-Type: application/json' -d '{"username":"admin","password":"..."}' https://ca.example.com/api/auth/login
+  curl -b jar.txt https://ca.example.com/api/certs
+  ```
+- **Behind a reverse proxy:** set `TRUST_PROXY=1`. If sign-in says "Cross-origin request blocked", add your hostname to `ALLOWED_ORIGINS`.
+- **Forgot your password?** Stop the app, delete `pki_storage/auth.json`, and start it again. You'll be asked to create a new account. Your CA and certificates are not touched.
+- Login protects access but doesn't encrypt traffic. Serve the dashboard over HTTPS if it is reachable beyond your home network.
 
 ### Your data: back it up
 
@@ -161,7 +179,7 @@ Everything the app creates (the CA **private key**, issued certificates, the CRL
 ## 2. First run
 
 1. **Initialize Root CA**: choose a name, organization, key size (4096 recommended) and validity.
-2. **Settings → Dashboard password**: optional, but recommended if the UI is reachable by others.
+2. **Create your admin account**: the first time you open the page it asks for a username and password (at least 10 characters). **Do this right after starting the container**, because until the account exists, whoever reaches the page first can create it. You can also set `ADMIN_USER` and `ADMIN_PASSWORD` in `.env` to create it automatically. See [Login & security](#login--security).
 3. **Server Sync**: enter your Caddy server's host, SSH user, and either a password or a private key. Click **Test SSH Connection**, then **Save Configuration**.
 4. **Issue Certificate** for each device, then download the `.p12` and install it on the device (see **Device Setup Guides** in the app footer).
 
