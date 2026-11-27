@@ -52,51 +52,35 @@ Self-hosted private CA & mTLS client-certificate manager for Caddy, now with sec
 
 ## 1. Install Pro mTLS Manager
 
-### Docker (recommended)
+Every xlab app installs and updates the same way: one folder, one `docker-compose.yml`, one `.env`, your data in `./pki_storage`.
 
-Requirements: Docker with the Compose plugin. Any Linux host works, including a Proxmox LXC with Docker installed.
+```bash
+mkdir -p /opt/xlab-mtls && cd /opt/xlab-mtls
+curl -fsSLO https://raw.githubusercontent.com/CJNG20u/xlab-mtls/main/docker-compose.yml
+curl -fsSL https://raw.githubusercontent.com/CJNG20u/xlab-mtls/main/.env.example -o .env
+docker compose up -d
+```
+
+Open `http://<host-ip>:3000`. On first visit you create the admin account (see [Login & security](#login--security)).
+
+Settings in `.env` are all optional; see [Configuration](#configuration-optional). Your CA, certificates and settings are stored in `./pki_storage`: [back it up](#your-data-back-it-up).
+
+### Update
+
+```bash
+cd /opt/xlab-mtls
+docker compose pull && docker compose up -d
+```
+
+Images are built automatically for `linux/amd64` and `linux/arm64`. `:latest` follows `main`; every release also gets version tags (for example `:2.1.0`, `:2`), so you can pin one with `image: ghcr.io/cjng20u/xlab-mtls:2.1.0`.
+
+### Build from source
 
 ```bash
 git clone https://github.com/CJNG20u/xlab-mtls.git
 cd xlab-mtls
-docker compose up -d --build
-```
-
-Open `http://<server-ip>:3000`.
-
-#### Prefer not to build? Use the prebuilt image
-
-A ready-made image is published to GitHub Container Registry on every push to `main`. Save this as `docker-compose.yml` in an empty folder:
-
-```yaml
-services:
-  pro-mtls-manager:
-    image: ghcr.io/cjng20u/xlab-mtls:latest
-    container_name: pro-mtls-manager
-    restart: unless-stopped
-    ports:
-      - "3000:3000"
-    env_file:
-      - path: .env
-        required: false
-    environment:
-      - DATA_DIR=/app/pki_storage
-    volumes:
-      - ./pki_storage:/app/pki_storage
-```
-
-```bash
-docker compose pull && docker compose up -d
-```
-
-Images are built automatically for `linux/amd64` and `linux/arm64`. `:latest` follows `main`; each release also gets version tags (e.g. `:2.0.0`, `:2`) so you can pin a version. The repo's own `docker-compose.yml` also pulls this image first and only builds from source when you pass `--build`.
-
-To update later:
-
-```bash
-cd xlab-mtls
-git pull
-docker compose up -d --build
+cp .env.example .env
+docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 ```
 
 ### Without Docker (bare metal / LXC + systemd)
@@ -180,7 +164,7 @@ Everything the app creates (the CA **private key**, issued certificates, the CRL
 
 > ⚠️ Anyone with `pki_storage/ca` can issue certificates your Caddy server will trust. Keep it private, back it up off the host, and **never commit it to Git**. `.gitignore` already excludes it.
 
-**Moving an existing install:** stop the app and copy the old `pki_storage` folder into the new `xlab-mtls/` folder. Your CA and all your certificates carry over unchanged.
+**Moving an existing install:** stop the app and copy the old `pki_storage` folder next to the new `docker-compose.yml`. Your CA and all your certificates carry over unchanged.
 
 ---
 
